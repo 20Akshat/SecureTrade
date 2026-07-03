@@ -29,6 +29,8 @@ export default function DashboardPage() {
   const [checkingVerified, setCheckingVerified] = useState(true);
   const [verifyAadhaarNo, setVerifyAadhaarNo] = useState("");
   const [verifyPanNo, setVerifyPanNo] = useState("");
+  const [verifyPhone, setVerifyPhone] = useState("");
+  const [verifyBrokerId, setVerifyBrokerId] = useState("");
   const [aadhaarFile, setAadhaarFile] = useState<File | null>(null);
   const [panFile, setPanFile] = useState<File | null>(null);
   const [verifyError, setVerifyError] = useState("");
@@ -160,6 +162,8 @@ export default function DashboardPage() {
       const formData = new FormData();
       formData.append("panNumber", verifyPanNo);
       formData.append("aadhaarNumber", verifyAadhaarNo);
+      formData.append("phone", verifyPhone);
+      formData.append("brokerClientId", verifyBrokerId);
       formData.append("panFile", panFile);
       formData.append("aadhaarFile", aadhaarFile);
 
@@ -209,6 +213,32 @@ export default function DashboardPage() {
                 ⚠️ {verifyError}
               </div>
             )}
+
+            <div>
+              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Mobile Number (For SMS Alerts)</label>
+              <input
+                type="tel"
+                required
+                pattern="[0-9]{10}"
+                maxLength={10}
+                value={verifyPhone}
+                onChange={(e) => setVerifyPhone(e.target.value)}
+                className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="9876543210"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Broker Client ID / Code</label>
+              <input
+                type="text"
+                required
+                value={verifyBrokerId}
+                onChange={(e) => setVerifyBrokerId(e.target.value.toUpperCase())}
+                className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="e.g. AAAE601993"
+              />
+            </div>
 
             <div>
               <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">PAN Card Number</label>

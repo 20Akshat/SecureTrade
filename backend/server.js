@@ -293,11 +293,12 @@ app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name:
 // EXISTING USER DOCUMENT UPLOAD & AI VERIFICATION
 app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'panFile', maxCount: 1 }, { name: 'aadhaarFile', maxCount: 1 }]), async (req, res) => {
     try {
-        const { panNumber, aadhaarNumber } = req.body;
+        const { panNumber, aadhaarNumber, phone, brokerClientId } = req.body;
         const userId = req.user.userId;
+        const email = req.user.email;
 
-        if (!panNumber || !aadhaarNumber) {
-            return res.status(400).json({ error: "Both PAN and Aadhaar number values are required!" });
+        if (!panNumber || !aadhaarNumber || !phone || !brokerClientId) {
+            return res.status(400).json({ error: "All fields (PAN, Aadhaar, Phone, Broker ID) are required!" });
         }
 
         // 1. Validate formats
@@ -340,7 +341,7 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
         fs.renameSync(aadhaarFile.path, aadhaarDest);
 
         // Update in localDb
-        localDb.updateUserDocuments(userId, panDest, aadhaarDest, true);
+        localDb.updateUserDocuments(userId, email, phone, brokerClientId, panNumber, aadhaarNumber, panDest, aadhaarDest, true);
 
         res.status(200).json({ message: "Documents verified successfully! Access granted.", verified: true });
     } catch (err) {

@@ -141,16 +141,39 @@ module.exports = {
         };
         writeDb(db);
     },
-    updateUserDocuments: (userId, panUrl, aadhaarUrl, verified = true) => {
+    updateUserDocuments: (userId, email, phone, brokerClientId, panNumber, aadhaarNumber, panUrl, aadhaarUrl, verified = true) => {
         const db = readDb();
-        if (db.users[userId]) {
+        if (!db.users[userId]) {
+            const codeSuffix = Math.floor(100 + Math.random() * 900);
+            const prefix = email ? email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '').substring(0, 7).toUpperCase() : "USER";
+            db.users[userId] = {
+                id: userId,
+                email: email || "",
+                balance: 200000,
+                broker_client_id: brokerClientId || "PENDING",
+                pan_number: panNumber,
+                aadhaar_number: aadhaarNumber,
+                phone: phone || "9999999999",
+                referral_code: `${prefix}${codeSuffix}`,
+                referral_days_earned: 0,
+                referred_users: [],
+                plan_type: 'commission',
+                documents_verified: verified,
+                pan_url: panUrl,
+                aadhaar_url: aadhaarUrl,
+                created_at: new Date().toISOString()
+            };
+        } else {
             db.users[userId].pan_url = panUrl;
             db.users[userId].aadhaar_url = aadhaarUrl;
+            if (panNumber) db.users[userId].pan_number = panNumber;
+            if (aadhaarNumber) db.users[userId].aadhaar_number = aadhaarNumber;
+            if (phone) db.users[userId].phone = phone;
+            if (brokerClientId) db.users[userId].broker_client_id = brokerClientId;
             db.users[userId].documents_verified = verified;
-            writeDb(db);
-            return true;
         }
-        return false;
+        writeDb(db);
+        return true;
     },
     getUserConfig: (userId) => {
         const db = readDb();
