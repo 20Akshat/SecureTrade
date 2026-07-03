@@ -10,9 +10,9 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
   const [phone, setPhone] = useState("");
   
   // Dynamic Broker/Identity document locks
-  const [verificationType, setVerificationType] = useState("PAN_CARD");
-  const [verificationId, setVerificationId] = useState("");
   const [brokerClientId, setBrokerClientId] = useState("");
+  const [panNumber, setPanNumber] = useState("");
+  const [aadhaarNumber, setAadhaarNumber] = useState("");
   
   // Forgot password flow states
   const [showForgot, setShowForgot] = useState(false);
@@ -44,7 +44,7 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
     // Pass verification payload
     const body = isLogin 
       ? { email, password } 
-      : { email, password, phone, brokerClientId, aadhaarNumber: verificationId, referralCode };
+      : { email, password, phone, brokerClientId, panNumber, aadhaarNumber, referralCode };
 
     try {
       const res = await fetch(url, {
@@ -66,7 +66,9 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
         alert("Account created successfully! Please login.");
         setPassword("");
         setPhone("");
-        setVerificationId("");
+        setPanNumber("");
+        setAadhaarNumber("");
+        setBrokerClientId("");
       }
     } catch (err: any) {
       setError(err.message);
@@ -327,6 +329,25 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
               </div>
 
               <div>
+                <label className="block text-slate-500 mb-1.5 ml-1">PAN Card Number</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <User className="h-4.5 w-4.5 text-slate-400" />
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    pattern="[A-Z]{5}[0-9]{4}[A-Z]{1}"
+                    maxLength={10}
+                    value={panNumber}
+                    onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                    className="block w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="ABCDE1234F"
+                  />
+                </div>
+              </div>
+
+              <div>
                 <label className="block text-slate-500 mb-1.5 ml-1">Aadhaar Card Number (12-Digit)</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -337,8 +358,8 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
                     required
                     pattern="[0-9]{12}"
                     maxLength={12}
-                    value={verificationId}
-                    onChange={(e) => setVerificationId(e.target.value.replace(/[^0-9]/g, ''))}
+                    value={aadhaarNumber}
+                    onChange={(e) => setAadhaarNumber(e.target.value.replace(/[^0-9]/g, ''))}
                     className="block w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                     placeholder="123456789012"
                   />

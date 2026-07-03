@@ -34,6 +34,7 @@ const speakeasy = require('speakeasy');
 const supabase = require('./db');
 const localDb = require('./localDb');
 const authMiddleware = require('./middleware/auth');
+const kyc = require('./utils/kyc');
 const http = require('http');
 const https = require('https');
 
@@ -107,14 +108,33 @@ app.get('/', (req, res) => res.json({ message: "SecureTrade API is running! 📈
 // SIGNUP
 app.post('/api/signup', async (req, res) => {
     try {
-        const { email, password, phone, brokerClientId, aadhaarNumber, referralCode } = req.body;
-        if (!email || !password || !phone || !brokerClientId || !aadhaarNumber) {
+        const { email, password, phone, brokerClientId, panNumber, aadhaarNumber, referralCode } = req.body;
+        if (!email || !password || !phone || !brokerClientId || !panNumber || !aadhaarNumber) {
             return res.status(400).json({ error: "All fields are required!" });
         }
         
+        // 1. Validate Aadhaar using Verhoeff checksum algorithm
+        if (!kyc.validateAadhaar(aadhaarNumber)) {
+            return res.status(400).json({ error: "Invalid Aadhaar Card Number! Please enter a real 12-digit Aadhaar." });
+        }
+
+        // 2. Validate PAN format
+        if (!kyc.validatePANFormat(panNumber)) {
+            return res.status(400).json({ error: "Invalid PAN Card format! Must be 10 characters (e.g. ABCDE1234F)." });
+        }
+
+        // 3. Verify PAN live with Government registry (if API configured)
+        const panCheck = await kyc.verifyPanWithGov(panNumber);
+        if (!panCheck.success) {
+            return res.status(400).json({ error: panCheck.error });
+        }
+
         // Anti-bypass locks
         if (localDb.checkVerificationIdExists(brokerClientId)) {
             return res.status(400).json({ error: "This Broker Client ID is already registered!" });
+        }
+        if (localDb.checkVerificationIdExists(panNumber)) {
+            return res.status(400).json({ error: "This PAN Card Number is already registered!" });
         }
         if (localDb.checkVerificationIdExists(aadhaarNumber)) {
             return res.status(400).json({ error: "This Aadhaar Card Number is already registered!" });
@@ -128,7 +148,7 @@ app.post('/api/signup', async (req, res) => {
         if (error) return res.status(400).json({ error: "Email already registered!" });
 
         // Save local configs
-        localDb.registerUserConfig(data[0].id, data[0].email, data[0].balance, brokerClientId, aadhaarNumber, phone, "AADHAAR");
+        localDb.registerUserConfig(data[0].id, data[0].email, data[0].balance, brokerClientId, panNumber, aadhaarNumber, phone);
 
         // Apply referral code if present
         if (referralCode) {

@@ -93,14 +93,16 @@ module.exports = {
         return Object.values(db.users).some(u => 
             (u.verification_id && u.verification_id.toUpperCase() === id.toUpperCase()) ||
             (u.broker_client_id && u.broker_client_id.toUpperCase() === id.toUpperCase()) ||
-            (u.government_id && u.government_id.toUpperCase() === id.toUpperCase())
+            (u.government_id && u.government_id.toUpperCase() === id.toUpperCase()) ||
+            (u.pan_number && u.pan_number.toUpperCase() === id.toUpperCase()) ||
+            (u.aadhaar_number && u.aadhaar_number.toUpperCase() === id.toUpperCase())
         );
     },
     checkPhoneExists: (phone) => {
         const db = readDb();
         return Object.values(db.users).some(u => u.phone === phone);
     },
-    registerUserConfig: (userId, email, balance, brokerClientId, governmentId, phone, verificationType = "PAN_CARD") => {
+    registerUserConfig: (userId, email, balance, brokerClientId, panNumber, aadhaarNumber, phone) => {
         const db = readDb();
         const codeSuffix = Math.floor(100 + Math.random() * 900);
         const prefix = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '').substring(0, 7).toUpperCase();
@@ -108,10 +110,9 @@ module.exports = {
             id: userId,
             email: email,
             balance: balance,
-            verification_type: verificationType,
-            verification_id: governmentId,
             broker_client_id: brokerClientId,
-            government_id: governmentId,
+            pan_number: panNumber,
+            aadhaar_number: aadhaarNumber,
             phone: phone,
             referral_code: `${prefix}${codeSuffix}`,
             referral_days_earned: 0,
