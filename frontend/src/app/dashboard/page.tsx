@@ -16,13 +16,14 @@ export default function DashboardPage() {
   const router = useRouter();
   const { marketData, selectedSymbol, setSelectedSymbol, isAutoTradeActive, toggleAutoTrade, isZeroHeroActive, toggleZeroHero, botStatus, isMarketOpen, strategyMode, setStrategyMode, targetMode, setTargetMode, requestNotificationPermission, triggerTestNotification } = useMarket();
   const [chartSymbol, setChartSymbol] = useState<string | null>(null);
-  const [referralData, setReferralData] = useState<{ referralCode: string; daysEarned: number; referredCount: number; unpaidInvoice: number; dailyProfit: number } | null>(null);
+  const [referralData, setReferralData] = useState<{ referralCode: string; daysEarned: number; referredCount: number; unpaidInvoice: number; dailyProfit: number; referredBy: string | null } | null>(null);
   const [paymentUtr, setPaymentUtr] = useState("");
   const [paymentPending, setPaymentPending] = useState(false);
   const [showRechargeModal, setShowRechargeModal] = useState(false);
   const [rechargeUtr, setRechargeUtr] = useState("");
   const [rechargePending, setRechargePending] = useState(false);
   const [payMode, setPayMode] = useState<"commission" | "monthly">("commission");
+  const [inputReferral, setInputReferral] = useState("");
 
   useEffect(() => {
     if (token) {
@@ -646,6 +647,62 @@ export default function DashboardPage() {
               </p>
             </div>
             <div className="flex items-center gap-4 flex-wrap bg-white/10 p-3 rounded-2xl border border-white/10 backdrop-blur-xs">
+              {!referralData.referredBy ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Referrer Code"
+                      value={inputReferral}
+                      onChange={(e) => setInputReferral(e.target.value.toUpperCase())}
+                      className="bg-white/15 border border-white/25 text-white placeholder-white/40 text-xs px-2.5 py-1.5 rounded-xl focus:outline-none focus:ring-1 focus:ring-white/40 w-28 font-bold"
+                    />
+                    <button
+                      onClick={async () => {
+                        if (!inputReferral) return;
+                        try {
+                          const res = await fetch("https://securetrade-n3qh.onrender.com/api/referrals/apply", {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              "Authorization": `Bearer ${token}`
+                            },
+                            body: JSON.stringify({ referralCode: inputReferral })
+                          });
+                          const data = await res.json();
+                          if (res.ok) {
+                            alert(data.message || "Referral code applied successfully! 🎉");
+                            const refRes = await fetch("https://securetrade-n3qh.onrender.com/api/referrals", {
+                              headers: { "Authorization": `Bearer ${token}` }
+                            });
+                            const refData = await refRes.json();
+                            if (refRes.ok) setReferralData(refData);
+                            setInputReferral("");
+                          } else {
+                            alert(data.error || "Failed to apply referral code.");
+                          }
+                        } catch (err) {
+                          alert("Error applying referral code.");
+                        }
+                      }}
+                      className="bg-white hover:bg-slate-100 text-slate-900 font-extrabold text-xs px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                  <div className="h-8 w-px bg-white/20" />
+                </>
+              ) : (
+                <>
+                  <div className="text-center px-1">
+                    <span className="text-[9px] text-white/70 block uppercase font-bold">Referred By</span>
+                    <span className="text-xs font-bold text-green-400 block mt-0.5 truncate max-w-[120px]" title={referralData.referredBy}>
+                      {referralData.referredBy.split('@')[0]}
+                    </span>
+                  </div>
+                  <div className="h-8 w-px bg-white/20" />
+                </>
+              )}
               <div className="text-center px-1">
                 <span className="text-[10px] text-white/70 block uppercase font-bold">Your Code</span>
                 <span className="text-sm font-black tracking-wider select-all cursor-pointer bg-white text-blue-700 px-2 py-0.5 rounded-md mt-0.5 inline-block">

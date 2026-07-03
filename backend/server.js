@@ -154,6 +154,7 @@ app.post('/api/login', async (req, res) => {
         const isPasswordCorrect = await bcrypt.compare(password, data.password);
         if (!isPasswordCorrect) return res.status(401).json({ error: "Invalid email or password." });
         const token = jwt.sign({ userId: data.id, email: data.email }, process.env.JWT_SECRET || 'super_secret_trading_key_123', { expiresIn: '1d' });
+        localDb.saveActiveToken(data.id, token);
         res.status(200).json({ message: "Login Successful! 🚀", token, balance: data.balance });
     } catch (err) { res.status(500).json({ error: "Login error." }); }
 });
@@ -973,6 +974,22 @@ app.get('/api/referrals', authMiddleware, async (req, res) => {
         res.json(details);
     } catch (err) {
         res.status(550).json({ error: "Failed to fetch referral details." });
+    }
+});
+
+// POST APPLY REFERRAL CODE AFTER SIGNUP
+app.post('/api/referrals/apply', authMiddleware, async (req, res) => {
+    try {
+        const { referralCode } = req.body;
+        if (!referralCode) return res.status(400).json({ error: "Referral code is required!" });
+        
+        const success = localDb.applyReferralCode(req.user.userId, req.user.email, referralCode);
+        if (!success) {
+            return res.status(400).json({ error: "Invalid referral code, already applied, or cannot refer yourself." });
+        }
+        res.json({ message: "Referral code applied successfully! 🎉 +3 Days added to your bot trial." });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to apply referral code." });
     }
 });
 

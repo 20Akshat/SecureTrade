@@ -220,6 +220,9 @@ module.exports = {
         const db = readDb();
         if (!referralCode) return false;
         
+        const newUser = db.users[newUserId];
+        if (!newUser || newUser.referred_by) return false;
+        
         // Find referrer by referral_code
         const referrerId = Object.keys(db.users).find(uid => {
             const u = db.users[uid];
@@ -235,11 +238,8 @@ module.exports = {
                 referrer.referred_users.push(newEmail);
                 referrer.referral_days_earned = (referrer.referral_days_earned || 0) + 3;
                 
-                // Add 3 days to new user config as well
-                const newUser = db.users[newUserId];
-                if (newUser) {
-                    newUser.referral_days_earned = (newUser.referral_days_earned || 0) + 3;
-                }
+                newUser.referral_days_earned = (newUser.referral_days_earned || 0) + 3;
+                newUser.referred_by = referrer.email;
                 
                 writeDb(db);
                 return true;
@@ -260,7 +260,8 @@ module.exports = {
             daysEarned: u.referral_days_earned || 0,
             referredCount: u.referred_users ? u.referred_users.length : 0,
             unpaidInvoice: (isAdmin || isTrialActive) ? 0 : (u.unpaid_commission_invoice || 0),
-            dailyProfit: (isAdmin || isTrialActive) ? 0 : (u.daily_profit_accumulated || 0)
+            dailyProfit: (isAdmin || isTrialActive) ? 0 : (u.daily_profit_accumulated || 0),
+            referredBy: u.referred_by || null
         };
     },
     trackTradeProfit: (userId, profit) => {
@@ -436,5 +437,12 @@ module.exports = {
         const db = readDb();
         const u = db.users[userId];
         return u ? !!u.is_blocked : false;
+    },
+    saveActiveToken: (userId, token) => {
+        const db = readDb();
+        if (db.users[userId]) {
+            db.users[userId].active_token = token;
+            writeDb(db);
+        }
     }
 };

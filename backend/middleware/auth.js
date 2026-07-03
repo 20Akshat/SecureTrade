@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const localDb = require('../localDb');
 
 // Yeh hamara Security Guard hai
 const authMiddleware = (req, res, next) => {
@@ -15,6 +16,12 @@ const authMiddleware = (req, res, next) => {
         // Agar yeh hacker ka banaya hua token hua, toh yeh line error phenk degi
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_trading_key_123');
         
+        // Single-device login check (enforces only one login session)
+        const u = localDb.getUserConfig(decoded.userId);
+        if (u && u.active_token && u.active_token !== token && decoded.email !== "akshatmarwadi5@gmail.com") {
+            return res.status(401).json({ error: "Logged in on another device." });
+        }
+
         // 3. Asli user ki details req (request) object mein chipka dena
         req.user = decoded;
         
