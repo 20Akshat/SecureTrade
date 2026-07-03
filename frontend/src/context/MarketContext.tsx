@@ -1173,6 +1173,17 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                     b.maxPremium2 = 0;
                   }
 
+                  // Send SMS Notification Alert on exit
+                  const exitMessage = `✅ [SecureTrade Alert] ${isTarget ? "🎯 Target" : "🚨 Stop-Loss"} Hit! Closed ${t.symbol} @ Suggested price ₹${currentPremium.toFixed(2)} (${pnlPercent >= 0 ? "+" : ""}${pnlPercent.toFixed(1)}% P&L).`;
+                  fetch("https://securetrade-n3qh.onrender.com/api/send-sms", {
+                    method: "POST",
+                    headers: { 
+                      "Content-Type": "application/json", 
+                      "Authorization": `Bearer ${token || b.token}` 
+                    },
+                    body: JSON.stringify({ message: exitMessage })
+                  }).catch(err => console.error("SMS Exit Dispatch error:", err));
+
                   b.cooldown = true;
                   lastActionTime.current = Date.now();
                   
@@ -1644,7 +1655,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                           const totalShares2 = b.maxLots2 * configForExit2.lotSize;
                           const endpoint2 = b.isShort2 ? "buy" : "sell";
                           
-                          await fetch(`https://securetrade-n3qh.onrender.com/api/${endpoint2}`, {
+                          const exitRes2 = await fetch(`https://securetrade-n3qh.onrender.com/api/${endpoint2}`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json", Authorization: `Bearer ${b.token}` },
                             body: JSON.stringify({
@@ -1653,9 +1664,25 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                               price: exitPremium2
                             })
                           });
-                          b.hasSecondPosition = false;
-                          b.entryPrice2 = 0;
-                          b.entrySymbol2 = "";
+                          if (exitRes2.ok) {
+                            const exitData2 = await exitRes2.json();
+                            updateBalanceRef.current(exitData2.newBalance);
+                            
+                            const pnl2 = ((exitPremium2 - b.entryPrice2) / b.entryPrice2) * 100;
+                            const earlyExitMessage2 = `⚠️ [SecureTrade Alert] Early Reversal Exit! Closed ${b.entrySymbol2} @ Suggested price ₹${exitPremium2.toFixed(2)} (${pnl2 >= 0 ? "+" : ""}${pnl2.toFixed(1)}% P&L) due to trend shift.`;
+                            fetch("https://securetrade-n3qh.onrender.com/api/send-sms", {
+                              method: "POST",
+                              headers: { 
+                                "Content-Type": "application/json", 
+                                "Authorization": `Bearer ${token || b.token}` 
+                              },
+                              body: JSON.stringify({ message: earlyExitMessage2 })
+                            }).catch(err => console.error("SMS Early Exit 2 Dispatch error:", err));
+
+                            b.hasSecondPosition = false;
+                            b.entryPrice2 = 0;
+                            b.entrySymbol2 = "";
+                          }
                         } catch (err) {
                           console.error("Trend reversal early exit for position 2 failed:", err);
                         }
@@ -1694,6 +1721,17 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                         const exitData = await exitRes.json();
                         updateBalanceRef.current(exitData.newBalance);
                         
+                        const pnl = ((exitPremium - b.entryPrice) / b.entryPrice) * 100;
+                        const earlyExitMessage = `⚠️ [SecureTrade Alert] Early Reversal Exit! Closed ${b.entrySymbol} @ Suggested price ₹${exitPremium.toFixed(2)} (${pnl >= 0 ? "+" : ""}${pnl.toFixed(1)}% P&L) due to trend shift.`;
+                        fetch("https://securetrade-n3qh.onrender.com/api/send-sms", {
+                          method: "POST",
+                          headers: { 
+                            "Content-Type": "application/json", 
+                            "Authorization": `Bearer ${token || b.token}` 
+                          },
+                          body: JSON.stringify({ message: earlyExitMessage })
+                        }).catch(err => console.error("SMS Early Exit Dispatch error:", err));
+
                         b.hasPosition = false;
                         b.entryPrice = 0;
                         b.entrySymbol = "";
