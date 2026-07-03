@@ -1138,31 +1138,16 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                   }
                 } catch {}
 
-                // Trailing Stop Loss Logic (TSL) to maximize win rates and let profits run dynamically
-                let trailingSlPct = -maxSl; // Default e.g. -15%
-                let isTrailingActive = false;
-
-                if (peakPnlPercent >= 20) {
-                  trailingSlPct = peakPnlPercent - 10; // Trail 10% below peak
-                  isTrailingActive = true;
-                } else if (peakPnlPercent >= 10) {
-                  trailingSlPct = 2; // Lock stop loss at +2% (guarantees profitable trade!)
-                  isTrailingActive = true;
-                }
-
                 let targetHit = false;
                 let slHit = false;
 
                 if (userTargetPrice && userTargetPrice > 0) {
                   targetHit = t.isShort ? currentPremium <= userTargetPrice : currentPremium >= userTargetPrice;
                 } else {
-                  // No fixed target exit so that profits have no upper limit!
-                  targetHit = false;
+                  targetHit = pnlPercent >= maxTarget;
                 }
 
-                if (isTrailingActive) {
-                  slHit = pnlPercent <= trailingSlPct;
-                } else if (userSlPrice && userSlPrice > 0) {
+                if (userSlPrice && userSlPrice > 0) {
                   slHit = t.isShort ? currentPremium >= userSlPrice : currentPremium <= userSlPrice;
                 } else {
                   slHit = pnlPercent <= -maxSl;
@@ -1806,8 +1791,11 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                 const delta = 0.55;
                 const atrTargetIndexPoints = activeAtr * targetMult;
                 const atrSlIndexPoints = activeAtr * slMult;
-                const atrTargetOptionPct = Math.max(6, Math.min(70, (atrTargetIndexPoints * delta / premium) * 100));
-                const atrSlOptionPct = Math.max(5, Math.min(30, (atrSlIndexPoints * delta / premium) * 100));
+                const atrSlOptionPct = Math.max(6, Math.min(25, (atrSlIndexPoints * delta / premium) * 100));
+                
+                // Keep ratio based target: 1:3 for crossover, 1:2 for gainz
+                const ratioMultiplier = activeStrategy === "gainz" ? 2.0 : 3.0;
+                const atrTargetOptionPct = Math.max(12, Math.min(75, atrSlOptionPct * ratioMultiplier));
 
                 let serverSlPct = activeSymbolData.slPct5ema || 15;
                 let serverTargetPct = activeSymbolData.targetPct5ema || 45;
