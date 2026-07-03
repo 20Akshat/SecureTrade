@@ -107,8 +107,8 @@ app.get('/', (req, res) => res.json({ message: "SecureTrade API is running! 📈
 // SIGNUP
 app.post('/api/signup', async (req, res) => {
     try {
-        const { email, password, phone, brokerClientId, governmentId, verificationType, referralCode } = req.body;
-        if (!email || !password || !phone || !brokerClientId || !governmentId) {
+        const { email, password, phone, brokerClientId, aadhaarNumber, referralCode } = req.body;
+        if (!email || !password || !phone || !brokerClientId || !aadhaarNumber) {
             return res.status(400).json({ error: "All fields are required!" });
         }
         
@@ -116,8 +116,8 @@ app.post('/api/signup', async (req, res) => {
         if (localDb.checkVerificationIdExists(brokerClientId)) {
             return res.status(400).json({ error: "This Broker Client ID is already registered!" });
         }
-        if (localDb.checkVerificationIdExists(governmentId)) {
-            return res.status(400).json({ error: `This ${verificationType ? verificationType.replace('_', ' ') : 'Government'} ID is already registered!` });
+        if (localDb.checkVerificationIdExists(aadhaarNumber)) {
+            return res.status(400).json({ error: "This Aadhaar Card Number is already registered!" });
         }
         if (localDb.checkPhoneExists(phone)) {
             return res.status(400).json({ error: "This Mobile Number is already registered!" });
@@ -128,7 +128,7 @@ app.post('/api/signup', async (req, res) => {
         if (error) return res.status(400).json({ error: "Email already registered!" });
 
         // Save local configs
-        localDb.registerUserConfig(data[0].id, data[0].email, data[0].balance, brokerClientId, governmentId, phone, verificationType || "PAN_CARD");
+        localDb.registerUserConfig(data[0].id, data[0].email, data[0].balance, brokerClientId, aadhaarNumber, phone, "AADHAAR");
 
         // Apply referral code if present
         if (referralCode) {

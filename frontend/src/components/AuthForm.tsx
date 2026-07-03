@@ -44,7 +44,7 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
     // Pass verification payload
     const body = isLogin 
       ? { email, password } 
-      : { email, password, phone, brokerClientId, governmentId: verificationId, verificationType, referralCode };
+      : { email, password, phone, brokerClientId, aadhaarNumber: verificationId, referralCode };
 
     try {
       const res = await fetch(url, {
@@ -327,21 +327,7 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
               </div>
 
               <div>
-                <label className="block text-slate-500 mb-1.5 ml-1">Government ID Document</label>
-                <select
-                  value={verificationType}
-                  onChange={(e) => { setVerificationType(e.target.value); setVerificationId(""); }}
-                  className="block w-full px-4 py-3 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                >
-                  <option value="PAN_CARD">PAN Card</option>
-                  <option value="AADHAAR">Aadhaar Card</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-500 mb-1.5 ml-1">
-                  {verificationType === "PAN_CARD" ? "PAN Card ID (e.g. ABCDE1234F)" : "12-Digit Aadhaar Number"}
-                </label>
+                <label className="block text-slate-500 mb-1.5 ml-1">Aadhaar Card Number (12-Digit)</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <User className="h-4.5 w-4.5 text-slate-400" />
@@ -349,10 +335,12 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
                   <input
                     type="text"
                     required
+                    pattern="[0-9]{12}"
+                    maxLength={12}
                     value={verificationId}
-                    onChange={(e) => setVerificationId(e.target.value.toUpperCase())}
+                    onChange={(e) => setVerificationId(e.target.value.replace(/[^0-9]/g, ''))}
                     className="block w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    placeholder={verificationType === "PAN_CARD" ? "ABCDE1234F" : "123456789012"}
+                    placeholder="123456789012"
                   />
                 </div>
               </div>
