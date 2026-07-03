@@ -286,18 +286,24 @@ app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name:
 
         // 2. Validate Aadhaar using Verhoeff checksum algorithm
         if (!kyc.validateAadhaar(aadhaarNumber)) {
-            return failCheck("Invalid Aadhaar Card Number! Please enter a real 12-digit Aadhaar.");
+            return failCheck("Invalid Aadhaar Card Number! Please enter a real 12-digit Aadhaar (must not start with 0 or 1).");
         }
 
-        // 3. Validate PAN format if supplied
+        // 3. Validate PAN or Broker ID
         if (panNumber) {
             if (!kyc.validatePANFormat(panNumber)) {
-                return failCheck("Invalid PAN Card format! Must be 10 characters (e.g. ABCDE1234F).");
+                return failCheck("Invalid PAN Card format! Must be 10 characters like ABCDE1234F.");
             }
             // Verify PAN live with Government registry (if API configured)
             const panCheck = await kyc.verifyPanWithGov(panNumber);
             if (!panCheck.success) {
                 return failCheck(panCheck.error);
+            }
+        }
+        if (brokerClientId) {
+            const brokerCheck = kyc.validateBrokerClientId(brokerClientId);
+            if (!brokerCheck.valid) {
+                return failCheck(brokerCheck.error);
             }
         }
 
@@ -448,12 +454,16 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
 
         // 1. Verify OTPs
         const stored = tempOtps[email];
-        if (!stored || stored.phone !== phone) {
-            return res.status(400).json({ error: "Session expired or mobile mismatch. Please request OTP again." });
+        if (!stored) {
+            return res.status(400).json({ error: "Session expired. Please login again to get fresh OTPs." });
         }
         if (Date.now() > stored.expires) {
             delete tempOtps[email];
-            return res.status(400).json({ error: "OTP expired. Please request a new OTP." });
+            return res.status(400).json({ error: "OTP expired. Please login again to get new OTPs." });
+        }
+        // Phone mismatch check — only if OTP was generated with a specific phone
+        if (stored.phone && stored.phone !== phone) {
+            return res.status(400).json({ error: "Mobile number does not match the one used for OTP. Please use the same number." });
         }
 
         const failCheck = (errMsg) => {
@@ -478,10 +488,18 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
 
         // 2. Validate Aadhaar using Verhoeff checksum algorithm
         if (!kyc.validateAadhaar(aadhaarNumber)) {
-            return failCheck("Invalid Aadhaar format structure!");
+            return failCheck("Invalid Aadhaar Card Number! Please enter a real 12-digit Aadhaar (must not start with 0 or 1).");
         }
+
+        // 3. Validate PAN format or Broker ID
         if (panNumber && !kyc.validatePANFormat(panNumber)) {
-            return failCheck("Invalid PAN format structure!");
+            return failCheck("Invalid PAN Card format! Must be like ABCDE1234F.");
+        }
+        if (brokerClientId) {
+            const brokerCheck = kyc.validateBrokerClientId(brokerClientId);
+            if (!brokerCheck.valid) {
+                return failCheck(brokerCheck.error);
+            }
         }
 
         // 3. Verify files present
