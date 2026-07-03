@@ -112,12 +112,76 @@ app.get('/', (req, res) => res.json({ message: "SecureTrade API is running! 📈
 
 const tempOtps = {};
 
+const { validateEmail, validatePhone } = require('./utils/validators');
+
+// REQUEST OTP FOR EXISTING USER (Login verification)
+app.post('/api/user/request-otp', async (req, res) => {
+    try {
+        const { email, phone } = req.body;
+        if (!email || !phone) {
+            return res.status(400).json({ error: "Email and phone number are required!" });
+        }
+
+        // Verify user exists
+        const userRes = await supabase.from('users').select('id').eq('email', email).single();
+        if (!userRes.data) {
+            return res.status(404).json({ error: "User not found. Please signup first." });
+        }
+        if (!localDb.checkPhoneExists(phone)) {
+            return res.status(400).json({ error: "Mobile number does not match registered user." });
+        }
+
+        // Generate OTPs
+        const emailOtp = Math.floor(100000 + Math.random() * 900000).toString();
+        const mobileOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // Store OTPs
+        tempOtps[email] = {
+            emailOtp,
+            mobileOtp,
+            phone,
+            attempts: 0,
+            expires: Date.now() + 10 * 60 * 1000 // 10 minutes
+        };
+
+        // Send Email OTP
+        await require('./utils/email').sendEmailOtp(email, emailOtp);
+        // Send Mobile OTP
+        await require('./utils/sms').sendMobileOtp(phone, mobileOtp);
+
+        const emailConfigured = !!process.env.EMAIL_USER;
+        const smsConfigured = !!process.env.TWILIO_ACCOUNT_SID;
+
+        res.status(200).json({
+            message: "Verification OTPs triggered successfully!",
+            simulated: !emailConfigured || !smsConfigured,
+            emailOtp: emailConfigured ? undefined : emailOtp,
+            mobileOtp: smsConfigured ? undefined : mobileOtp
+        });
+    } catch (err) {
+        console.error("OTP request error:", err.message);
+        res.status(500).json({ error: "Failed to trigger OTPs. Please try again." });
+    }
+});
+
 // REQUEST SIGNUP OTP
 app.post('/api/signup/request-otp', async (req, res) => {
     try {
         const { email, phone } = req.body;
         if (!email || !phone) {
             return res.status(400).json({ error: "Email and phone number are required!" });
+        }
+
+        // Validate email format + check for disposable domains
+        const emailCheck = validateEmail(email);
+        if (!emailCheck.valid) {
+            return res.status(400).json({ error: emailCheck.error });
+        }
+
+        // Validate phone number (10-digit Indian mobile)
+        const phoneCheck = validatePhone(phone);
+        if (!phoneCheck.valid) {
+            return res.status(400).json({ error: phoneCheck.error });
         }
 
         // Check if phone or email already registered in Supabase
@@ -171,6 +235,18 @@ app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name:
         }
         if (!panNumber && !brokerClientId) {
             return res.status(400).json({ error: "Either PAN Card Number or Broker Client ID is required!" });
+        }
+
+        // Validate email format + block disposable domains
+        const emailCheck = validateEmail(email);
+        if (!emailCheck.valid) {
+            return res.status(400).json({ error: emailCheck.error });
+        }
+
+        // Validate Indian phone number
+        const phoneCheck = validatePhone(phone);
+        if (!phoneCheck.valid) {
+            return res.status(400).json({ error: phoneCheck.error });
         }
 
         // Check if blocklisted
@@ -452,6 +528,7 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
 });
 
 // LOGIN
+// LOGIN
 app.post('/api/login', async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -461,7 +538,42 @@ app.post('/api/login', async (req, res) => {
         if (!isPasswordCorrect) return res.status(401).json({ error: "Invalid email or password." });
         const token = jwt.sign({ userId: data.id, email: data.email }, process.env.JWT_SECRET || 'super_secret_trading_key_123', { expiresIn: '1d' });
         localDb.saveActiveToken(data.id, token);
-        res.status(200).json({ message: "Login Successful! 🚀", token, balance: data.balance });
+
+        // Retrieve user config to check verification status
+        const userConfig = localDb.getUserConfig(data.id) || {};
+        const isVerified = !!userConfig.documents_verified;
+
+        // If not verified, generate and send OTPs (email & SMS)
+        let otpInfo = { otpSent: false };
+        if (!isVerified) {
+            const emailOtp = Math.floor(100000 + Math.random() * 900000).toString();
+            const mobileOtp = Math.floor(100000 + Math.random() * 900000).toString();
+            tempOtps[email] = {
+                emailOtp,
+                mobileOtp,
+                phone: userConfig.phone || "",
+                attempts: 0,
+                expires: Date.now() + 10 * 60 * 1000
+            };
+            const emailResult = await require('./utils/email').sendEmailOtp(email, emailOtp);
+            const smsResult = await require('./utils/sms').sendMobileOtp(userConfig.phone || "", mobileOtp);
+            otpInfo = {
+                otpSent: true,
+                simulatedEmail: emailResult.simulated || false,
+                simulatedSms: smsResult.simulated || false
+            };
+        }
+
+        // Respond with verification status and OTP info
+        res.status(200).json({
+            message: "Login Successful! 🚀",
+            token,
+            balance: data.balance,
+            email: data.email,
+            phone: userConfig.phone || "",
+            documents_verified: isVerified,
+            ...otpInfo
+        });
     } catch (err) { res.status(500).json({ error: "Login error." }); }
 });
 
@@ -489,7 +601,17 @@ app.post('/api/auth/forgot-password', async (req, res) => {
         const debugPath = path.join(__dirname, '../scratch/otp_debug.log');
         fs.appendFileSync(debugPath, `[${new Date().toISOString()}] OTP for ${email}: ${otp}\n`, 'utf8');
 
-        res.status(200).json({ message: "OTP sent successfully! Check console logs or otp_debug.log." });
+        // Send OTP via email (if SMTP configured) and get simulated flag
+        const emailResult = await require('./utils/email').sendEmailOtp(email, otp);
+
+        // Respond indicating whether real email was sent or simulated
+        res.status(200).json({
+            message: emailResult.simulated
+                ? "OTP generated in demo mode. Check console logs or otp_debug.log."
+                : "OTP sent to your email successfully!",
+            simulated: emailResult.simulated,
+            emailOtp: emailResult.simulated ? otp : undefined
+        });
     } catch (err) {
         res.status(500).json({ error: "Failed to request OTP." });
     }

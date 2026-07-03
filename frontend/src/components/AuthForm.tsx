@@ -30,6 +30,9 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
   const [referralCode, setReferralCode] = useState("");
 
   const [error, setError] = useState("");
+  const [isVerificationMode, setIsVerificationMode] = useState(false);
+  const [loginToken, setLoginToken] = useState<string | null>(null); // token stored during verification
+  const [loginVerifyMethod, setLoginVerifyMethod] = useState<"pan" | "broker">("pan");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -87,7 +90,21 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
       }
 
       if (isLogin) {
-        onLogin(data.token, data.balance);
+        // Handle login response
+        if (data.phone) setPhone(data.phone);
+        if (data.documents_verified) {
+          // User already verified - go straight to dashboard
+          onLogin(data.token, data.balance);
+        } else {
+          // User not verified - store token and enter verification mode
+          setLoginToken(data.token);
+          setIsVerificationMode(true);
+          // Store OTP info if simulated (demo mode auto-fill)
+          if (data.otpSent && data.simulatedEmail && data.emailOtp) setEmailOtp(data.emailOtp);
+          if (data.otpSent && data.simulatedSms && data.mobileOtp) setMobileOtp(data.mobileOtp);
+          setError("");
+          alert("Verification required! OTPs have been sent to your registered email and mobile number.");
+        }
       } else {
         setIsLogin(true);
         alert("Account created successfully! Please login.");
@@ -107,7 +124,43 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
     }
   };
 
-  const handleRequestSignupOtp = async (e: React.MouseEvent) => {
+  const handleVerification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+        if (!panFile || !aadhaarFile) {
+            throw new Error("Both Aadhaar Card screenshot and PAN/Broker document screenshot are required!");
+        }
+        const formData = new FormData();
+        formData.append("emailOtp", emailOtp);
+        formData.append("mobileOtp", mobileOtp);
+        formData.append("phone", phone);
+        formData.append("panNumber", loginVerifyMethod === "pan" ? panNumber : "");
+        formData.append("brokerClientId", loginVerifyMethod === "broker" ? brokerClientId : "");
+        formData.append("aadhaarNumber", aadhaarNumber);
+        formData.append("panFile", panFile);
+        formData.append("aadhaarFile", aadhaarFile);
+        const useToken = loginToken || "";
+        const res = await fetch("https://securetrade-n3qh.onrender.com/api/user/verify-documents", {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${useToken}` },
+            body: formData,
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Verification failed");
+        alert("Verification successful! Welcome to SecureTrade.");
+        setIsVerificationMode(false);
+        // Now login user to dashboard
+        onLogin(useToken, 0);
+    } catch (err: any) {
+        setError(err.message);
+    } finally {
+        setLoading(false);
+    }
+};
+
+const handleRequestSignupOtp = async (e: React.MouseEvent) => {
     e.preventDefault();
     setError("");
     
@@ -155,7 +208,11 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setOtpSent(true);
-      alert("Verification OTP sent! Check backend terminal or scratch/otp_debug.log.");
+      if (data.simulated) {
+        alert(`Demo Mode: OTP is ${data.emailOtp || "check logs"} (auto-fill not possible here, enter manually).`);
+      } else {
+        alert("OTP sent to your email successfully! Please check your inbox.");
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -196,8 +253,9 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
 
         <div className="relative z-10 w-full max-w-md p-8 bg-white border border-slate-200 rounded-3xl shadow-xl">
           <div className="text-center mb-8">
+            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-black text-white text-base mx-auto mb-3">ST</div>
             <h1 className="text-2xl font-black text-slate-800 tracking-tight">Forgot Password</h1>
-            <p className="text-slate-450 text-xs font-semibold mt-1">Reset your SecureTrade account password.</p>
+            <p className="text-slate-500 text-xs font-semibold mt-1">Reset your SecureTrade account password.</p>
           </div>
 
           {error && (
@@ -281,6 +339,149 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
               Back to Login
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── VERIFICATION MODE SCREEN (after login, unverified user) ──
+  if (isVerificationMode) {
+    return (
+      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-5">
+          <div className="text-center mb-2">
+            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center font-black text-white text-lg mx-auto mb-3">🛡️</div>
+            <h1 className="text-xl font-black text-white tracking-tight">Identity Verification Required</h1>
+            <p className="text-slate-400 text-xs mt-2">OTPs have been sent to your registered email and mobile. Fill in details below to unlock access.</p>
+          </div>
+
+          {error && (
+            <div className="p-4 bg-red-950/50 border border-red-900 text-red-400 text-xs font-bold rounded-xl text-center">
+              ⚠️ {error}
+            </div>
+          )}
+
+          <form onSubmit={handleVerification} className="space-y-4">
+            {/* Email OTP */}
+            <div>
+              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Email Verification OTP</label>
+              <input
+                type="text"
+                required
+                maxLength={6}
+                value={emailOtp}
+                onChange={(e) => setEmailOtp(e.target.value.replace(/[^0-9]/g, ''))}
+                className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white tracking-widest text-center font-black focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+                placeholder="Email OTP"
+              />
+            </div>
+
+            {/* Mobile OTP */}
+            <div>
+              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Mobile Verification OTP</label>
+              <input
+                type="text"
+                required
+                maxLength={6}
+                value={mobileOtp}
+                onChange={(e) => setMobileOtp(e.target.value.replace(/[^0-9]/g, ''))}
+                className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white tracking-widest text-center font-black focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+                placeholder="Mobile OTP"
+              />
+            </div>
+
+            {/* Aadhaar Number */}
+            <div>
+              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Aadhaar Card Number (12-Digit)</label>
+              <input
+                type="text"
+                required
+                pattern="[0-9]{12}"
+                maxLength={12}
+                value={aadhaarNumber}
+                onChange={(e) => setAadhaarNumber(e.target.value.replace(/[^0-9]/g, ''))}
+                className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="123456789012"
+              />
+            </div>
+
+            {/* Verify Method */}
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col gap-2">
+              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider">Verify Secondary Identity Using:</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-300 cursor-pointer">
+                  <input type="radio" name="loginVerifyMethod" checked={loginVerifyMethod === "pan"} onChange={() => setLoginVerifyMethod("pan")} className="accent-blue-600 w-4 h-4" />
+                  PAN Card
+                </label>
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-300 cursor-pointer">
+                  <input type="radio" name="loginVerifyMethod" checked={loginVerifyMethod === "broker"} onChange={() => setLoginVerifyMethod("broker")} className="accent-blue-600 w-4 h-4" />
+                  Broker Client ID
+                </label>
+              </div>
+            </div>
+
+            {loginVerifyMethod === "pan" ? (
+              <div>
+                <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">PAN Card Number</label>
+                <input
+                  type="text"
+                  required
+                  pattern="[A-Z]{5}[0-9]{4}[A-Z]{1}"
+                  maxLength={10}
+                  value={panNumber}
+                  onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                  className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="ABCDE1234F"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Broker Client ID</label>
+                <input
+                  type="text"
+                  required
+                  value={brokerClientId}
+                  onChange={(e) => setBrokerClientId(e.target.value.toUpperCase())}
+                  className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g. AAAE601993"
+                />
+              </div>
+            )}
+
+            {/* PAN / Broker Screenshot */}
+            <div>
+              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">
+                {loginVerifyMethod === "pan" ? "PAN Card Screenshot" : "Broker Profile Screenshot"}
+              </label>
+              <input
+                type="file"
+                required
+                accept="image/*"
+                onChange={(e) => setPanFile(e.target.files?.[0] || null)}
+                className="block w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer"
+              />
+            </div>
+
+            {/* Aadhaar Screenshot */}
+            <div>
+              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Aadhaar Card Screenshot</label>
+              <input
+                type="file"
+                required
+                accept="image/*"
+                onChange={(e) => setAadhaarFile(e.target.files?.[0] || null)}
+                className="block w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold rounded-xl transition-all shadow-md text-xs tracking-wider uppercase disabled:opacity-50"
+            >
+              {loading ? "Scanning with Vision AI..." : "Verify & Unlock Dashboard"}
+            </button>
+          </form>
         </div>
       </div>
     );

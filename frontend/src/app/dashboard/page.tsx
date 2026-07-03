@@ -160,6 +160,15 @@ export default function DashboardPage() {
       return;
     }
 
+    // Decode JWT to extract email (fallback to empty if decoding fails)
+    let email = "";
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      email = payload.email || "";
+    } catch (e) {
+      console.warn("Failed to decode token for email");
+    }
+
     setVerifyLoading(true);
     try {
       const res = await fetch("https://securetrade-n3qh.onrender.com/api/user/request-otp", {
@@ -168,7 +177,7 @@ export default function DashboardPage() {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({ phone: verifyPhone })
+        body: JSON.stringify({ email, phone: verifyPhone })
       });
       const data = await res.json();
       if (!res.ok) {
