@@ -31,6 +31,10 @@ export default function DashboardPage() {
   const [verifyPanNo, setVerifyPanNo] = useState("");
   const [verifyPhone, setVerifyPhone] = useState("");
   const [verifyBrokerId, setVerifyBrokerId] = useState("");
+  const [verifyMethod, setVerifyMethod] = useState<"pan" | "broker">("pan");
+  const [verifyEmailOtp, setVerifyEmailOtp] = useState("");
+  const [verifyMobileOtp, setVerifyMobileOtp] = useState("");
+  const [verifyOtpRequested, setVerifyOtpRequested] = useState(false);
   const [aadhaarFile, setAadhaarFile] = useState<File | null>(null);
   const [panFile, setPanFile] = useState<File | null>(null);
   const [verifyError, setVerifyError] = useState("");
@@ -147,23 +151,63 @@ export default function DashboardPage() {
     </div>
   );
 
+  const handleSendVerifyOtps = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setVerifyError("");
+    
+    if (!verifyPhone) {
+      setVerifyError("Please fill in your Mobile Number first to request verification OTPs.");
+      return;
+    }
+
+    setVerifyLoading(true);
+    try {
+      const res = await fetch("https://securetrade-n3qh.onrender.com/api/user/request-otp", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ phone: verifyPhone })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to trigger OTPs.");
+      }
+      setVerifyOtpRequested(true);
+      if (data.simulated) {
+        setVerifyEmailOtp(data.emailOtp || "123456");
+        setVerifyMobileOtp(data.mobileOtp || "654321");
+        alert(`Demo Mode: Simulated OTP codes generated!\nEmail OTP: ${data.emailOtp || "123456"}\nMobile OTP: ${data.mobileOtp || "654321"}\n(Auto-filled for convenience!)`);
+      } else {
+        alert("Verification OTP codes sent successfully to your Email & Mobile Number!");
+      }
+    } catch (err: any) {
+      setVerifyError(err.message);
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
   const handleVerifyExistingUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setVerifyError("");
     setVerifyLoading(true);
 
     if (!panFile || !aadhaarFile) {
-      setVerifyError("Both PAN Card/Broker Profile and Aadhaar Card screenshots are required!");
+      setVerifyError("Both Aadhaar Card screenshot and secondary document screenshots are required!");
       setVerifyLoading(false);
       return;
     }
 
     try {
       const formData = new FormData();
-      formData.append("panNumber", verifyPanNo);
+      formData.append("panNumber", verifyMethod === "pan" ? verifyPanNo : "");
+      formData.append("brokerClientId", verifyMethod === "broker" ? verifyBrokerId : "");
       formData.append("aadhaarNumber", verifyAadhaarNo);
       formData.append("phone", verifyPhone);
-      formData.append("brokerClientId", verifyBrokerId);
+      formData.append("emailOtp", verifyEmailOtp);
+      formData.append("mobileOtp", verifyMobileOtp);
       formData.append("panFile", panFile);
       formData.append("aadhaarFile", aadhaarFile);
 
@@ -207,7 +251,7 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <form onSubmit={handleVerifyExistingUser} className="space-y-4">
+          <form onSubmit={verifyOtpRequested ? handleVerifyExistingUser : handleSendVerifyOtps} className="space-y-4">
             {verifyError && (
               <div className="p-4 bg-red-950/50 border border-red-900 text-red-400 text-xs font-bold rounded-xl text-center">
                 ⚠️ {verifyError}
@@ -219,84 +263,155 @@ export default function DashboardPage() {
               <input
                 type="tel"
                 required
+                disabled={verifyOtpRequested}
                 pattern="[0-9]{10}"
                 maxLength={10}
                 value={verifyPhone}
                 onChange={(e) => setVerifyPhone(e.target.value)}
-                className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                 placeholder="9876543210"
               />
             </div>
 
-            <div>
-              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Broker Client ID / Code</label>
-              <input
-                type="text"
-                required
-                value={verifyBrokerId}
-                onChange={(e) => setVerifyBrokerId(e.target.value.toUpperCase())}
-                className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g. AAAE601993"
-              />
-            </div>
+            {!verifyOtpRequested ? (
+              <button
+                type="submit"
+                disabled={verifyLoading}
+                className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold rounded-xl transition-all shadow-md active:scale-98 text-xs tracking-wider uppercase disabled:opacity-50"
+              >
+                {verifyLoading ? "Requesting OTPs..." : "Request Verification OTPs"}
+              </button>
+            ) : (
+              <>
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col gap-2">
+                  <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider">Verify Secondary Identity Using:</label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-350 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="verifyMethodExisting"
+                        checked={verifyMethod === "pan"}
+                        onChange={() => setVerifyMethod("pan")}
+                        className="accent-blue-600 w-4 h-4"
+                      />
+                      PAN Card
+                    </label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-350 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="verifyMethodExisting"
+                        checked={verifyMethod === "broker"}
+                        onChange={() => setVerifyMethod("broker")}
+                        className="accent-blue-600 w-4 h-4"
+                      />
+                      Broker Client ID
+                    </label>
+                  </div>
+                </div>
 
-            <div>
-              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">PAN Card Number</label>
-              <input
-                type="text"
-                required
-                pattern="[A-Z]{5}[0-9]{4}[A-Z]{1}"
-                maxLength={10}
-                value={verifyPanNo}
-                onChange={(e) => setVerifyPanNo(e.target.value.toUpperCase())}
-                className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="ABCDE1234F"
-              />
-            </div>
+                {verifyMethod === "broker" && (
+                  <div>
+                    <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Broker Client ID / Code</label>
+                    <input
+                      type="text"
+                      required
+                      value={verifyBrokerId}
+                      onChange={(e) => setVerifyBrokerId(e.target.value.toUpperCase())}
+                      className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g. AAAE601993"
+                    />
+                  </div>
+                )}
 
-            <div>
-              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Aadhaar Card Number (12-Digit)</label>
-              <input
-                type="text"
-                required
-                pattern="[0-9]{12}"
-                maxLength={12}
-                value={verifyAadhaarNo}
-                onChange={(e) => setVerifyAadhaarNo(e.target.value.replace(/[^0-9]/g, ''))}
-                className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="123456789012"
-              />
-            </div>
+                {verifyMethod === "pan" && (
+                  <div>
+                    <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">PAN Card Number</label>
+                    <input
+                      type="text"
+                      required
+                      pattern="[A-Z]{5}[0-9]{4}[A-Z]{1}"
+                      maxLength={10}
+                      value={verifyPanNo}
+                      onChange={(e) => setVerifyPanNo(e.target.value.toUpperCase())}
+                      className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="ABCDE1234F"
+                    />
+                  </div>
+                )}
 
-            <div>
-              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">PAN Card / Broker Profile Screenshot</label>
-              <input
-                type="file"
-                required
-                accept="image/*"
-                onChange={(e) => setPanFile(e.target.files?.[0] || null)}
-                className="block w-full text-xs text-slate-450 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer"
-              />
-            </div>
+                <div>
+                  <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Aadhaar Card Number (12-Digit)</label>
+                  <input
+                    type="text"
+                    required
+                    pattern="[0-9]{12}"
+                    maxLength={12}
+                    value={verifyAadhaarNo}
+                    onChange={(e) => setVerifyAadhaarNo(e.target.value.replace(/[^0-9]/g, ''))}
+                    className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="123456789012"
+                  />
+                </div>
 
-            <div>
-              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Aadhaar Card Screenshot</label>
-              <input
-                type="file"
-                required
-                accept="image/*"
-                onChange={(e) => setAadhaarFile(e.target.files?.[0] || null)}
-                className="block w-full text-xs text-slate-455 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer"
-              />
-            </div>
+                <div>
+                  <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Email Verification OTP (6-Digit)</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={verifyEmailOtp}
+                    onChange={(e) => setVerifyEmailOtp(e.target.value.replace(/[^0-9]/g, ''))}
+                    className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="123456"
+                  />
+                </div>
 
-            <button
-              type="submit"
-              disabled={verifyLoading}
-              className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold rounded-xl transition-all shadow-md active:scale-98 text-xs tracking-wider uppercase disabled:opacity-50"
-            >
-              {verifyLoading ? "Scanning with Vision AI..." : "Verify & Unlock Terminal"}
-            </button>
+                <div>
+                  <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Mobile Verification OTP (6-Digit)</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={verifyMobileOtp}
+                    onChange={(e) => setVerifyMobileOtp(e.target.value.replace(/[^0-9]/g, ''))}
+                    className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="654321"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">
+                    {verifyMethod === "pan" ? "PAN Card Screenshot" : "Broker Profile Screenshot"}
+                  </label>
+                  <input
+                    type="file"
+                    required
+                    accept="image/*"
+                    onChange={(e) => setPanFile(e.target.files?.[0] || null)}
+                    className="block w-full text-xs text-slate-450 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Aadhaar Card Screenshot</label>
+                  <input
+                    type="file"
+                    required
+                    accept="image/*"
+                    onChange={(e) => setAadhaarFile(e.target.files?.[0] || null)}
+                    className="block w-full text-xs text-slate-455 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={verifyLoading}
+                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold rounded-xl transition-all shadow-md active:scale-98 text-xs tracking-wider uppercase disabled:opacity-50"
+                >
+                  {verifyLoading ? "Scanning with Vision AI..." : "Verify & Unlock Terminal"}
+                </button>
+              </>
+            )}
           </form>
         </div>
       </div>

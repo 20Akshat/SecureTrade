@@ -20,6 +20,7 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
   const [otpRequested, setOtpRequested] = useState(false);
   const [panFile, setPanFile] = useState<File | null>(null);
   const [aadhaarFile, setAadhaarFile] = useState<File | null>(null);
+  const [signupVerifyMethod, setSignupVerifyMethod] = useState<"pan" | "broker">("pan");
   
   // Forgot password flow states
   const [showForgot, setShowForgot] = useState(false);
@@ -64,8 +65,8 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
         formData.append("email", email);
         formData.append("password", password);
         formData.append("phone", phone);
-        formData.append("brokerClientId", brokerClientId);
-        formData.append("panNumber", panNumber);
+        formData.append("brokerClientId", signupVerifyMethod === "broker" ? brokerClientId : "");
+        formData.append("panNumber", signupVerifyMethod === "pan" ? panNumber : "");
         formData.append("aadhaarNumber", aadhaarNumber);
         formData.append("emailOtp", emailOtp);
         formData.append("mobileOtp", mobileOtp);
@@ -127,7 +128,13 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
         throw new Error(data.error || "Failed to trigger OTPs.");
       }
       setOtpRequested(true);
-      alert("Verification OTP codes sent successfully to your Email & Mobile Number!");
+      if (data.simulated) {
+        setEmailOtp(data.emailOtp || "123456");
+        setMobileOtp(data.mobileOtp || "654321");
+        alert(`Demo Mode: Simulated OTP codes generated!\nEmail OTP: ${data.emailOtp || "123456"}\nMobile OTP: ${data.mobileOtp || "654321"}\n(Auto-filled for convenience!)`);
+      } else {
+        alert("Verification OTP codes sent successfully to your Email & Mobile Number!");
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -369,41 +376,71 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
                 </div>
               </div>
 
-              <div>
-                <label className="block text-slate-500 mb-1.5 ml-1">Broker Client ID / Code</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <User className="h-4.5 w-4.5 text-slate-400" />
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    value={brokerClientId}
-                    onChange={(e) => setBrokerClientId(e.target.value.toUpperCase())}
-                    className="block w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    placeholder="e.g. AAAE601993"
-                  />
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-2">
+                <label className="block text-slate-600 text-xs font-bold mb-1">Verify Secondary Identity Using:</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="verifyMethod"
+                      checked={signupVerifyMethod === "pan"}
+                      onChange={() => setSignupVerifyMethod("pan")}
+                      className="accent-blue-600 w-4 h-4"
+                    />
+                    PAN Card
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="verifyMethod"
+                      checked={signupVerifyMethod === "broker"}
+                      onChange={() => setSignupVerifyMethod("broker")}
+                      className="accent-blue-600 w-4 h-4"
+                    />
+                    Broker Client ID
+                  </label>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-slate-500 mb-1.5 ml-1">PAN Card Number</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <User className="h-4.5 w-4.5 text-slate-400" />
+              {signupVerifyMethod === "broker" && (
+                <div>
+                  <label className="block text-slate-500 mb-1.5 ml-1">Broker Client ID / Code</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                      <User className="h-4.5 w-4.5 text-slate-400" />
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      value={brokerClientId}
+                      onChange={(e) => setBrokerClientId(e.target.value.toUpperCase())}
+                      className="block w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      placeholder="e.g. AAAE601993"
+                    />
                   </div>
-                  <input
-                    type="text"
-                    required
-                    pattern="[A-Z]{5}[0-9]{4}[A-Z]{1}"
-                    maxLength={10}
-                    value={panNumber}
-                    onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
-                    className="block w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    placeholder="ABCDE1234F"
-                  />
                 </div>
-              </div>
+              )}
+
+              {signupVerifyMethod === "pan" && (
+                <div>
+                  <label className="block text-slate-500 mb-1.5 ml-1">PAN Card Number</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                      <User className="h-4.5 w-4.5 text-slate-400" />
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      pattern="[A-Z]{5}[0-9]{4}[A-Z]{1}"
+                      maxLength={10}
+                      value={panNumber}
+                      onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                      className="block w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      placeholder="ABCDE1234F"
+                    />
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-slate-500 mb-1.5 ml-1">Aadhaar Card Number (12-Digit)</label>
@@ -441,7 +478,9 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
               </div>
 
               <div>
-                <label className="block text-slate-500 mb-1.5 ml-1">PAN Card / Broker Profile Screenshot</label>
+                <label className="block text-slate-500 mb-1.5 ml-1">
+                  {signupVerifyMethod === "pan" ? "PAN Card Screenshot" : "Broker Profile Screenshot"}
+                </label>
                 <input
                   type="file"
                   required

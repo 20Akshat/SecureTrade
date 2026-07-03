@@ -138,6 +138,7 @@ app.post('/api/signup/request-otp', async (req, res) => {
             emailOtp,
             mobileOtp,
             phone,
+            attempts: 0,
             expires: Date.now() + 10 * 60 * 1000 // 10 minutes
         };
 
@@ -146,10 +147,14 @@ app.post('/api/signup/request-otp', async (req, res) => {
         // Send Mobile OTP
         await require('./utils/sms').sendMobileOtp(phone, mobileOtp);
 
+        const emailConfigured = !!process.env.EMAIL_USER;
+        const smsConfigured = !!process.env.TWILIO_ACCOUNT_SID;
+
         res.status(200).json({ 
             message: "Verification OTPs triggered successfully! Please check your Email and Mobile number.",
-            simulatedEmail: !process.env.EMAIL_USER,
-            simulatedSms: !process.env.TWILIO_ACCOUNT_SID
+            simulated: !emailConfigured || !smsConfigured,
+            emailOtp: emailConfigured ? undefined : emailOtp,
+            mobileOtp: smsConfigured ? undefined : mobileOtp
         });
     } catch (err) {
         console.error("OTP request error:", err.message);
@@ -161,8 +166,11 @@ app.post('/api/signup/request-otp', async (req, res) => {
 app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name: 'aadhaarFile', maxCount: 1 }]), async (req, res) => {
     try {
         const { email, password, phone, brokerClientId, panNumber, aadhaarNumber, emailOtp, mobileOtp, referralCode } = req.body;
-        if (!email || !password || !phone || !brokerClientId || !panNumber || !aadhaarNumber || !emailOtp || !mobileOtp) {
-            return res.status(400).json({ error: "All fields, including Email and Mobile verification OTPs, are required!" });
+        if (!email || !password || !phone || !aadhaarNumber || !emailOtp || !mobileOtp) {
+            return res.status(400).json({ error: "All profile and verification OTP fields are required!" });
+        }
+        if (!panNumber && !brokerClientId) {
+            return res.status(400).json({ error: "Either PAN Card Number or Broker Client ID is required!" });
         }
 
         // Check if blocklisted
@@ -205,31 +213,34 @@ app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name:
             return failCheck("Invalid Aadhaar Card Number! Please enter a real 12-digit Aadhaar.");
         }
 
-        // 3. Validate PAN format
-        if (!kyc.validatePANFormat(panNumber)) {
-            return failCheck("Invalid PAN Card format! Must be 10 characters (e.g. ABCDE1234F).");
+        // 3. Validate PAN format if supplied
+        if (panNumber) {
+            if (!kyc.validatePANFormat(panNumber)) {
+                return failCheck("Invalid PAN Card format! Must be 10 characters (e.g. ABCDE1234F).");
+            }
+            // Verify PAN live with Government registry (if API configured)
+            const panCheck = await kyc.verifyPanWithGov(panNumber);
+            if (!panCheck.success) {
+                return failCheck(panCheck.error);
+            }
         }
 
-        // 4. Verify PAN live with Government registry (if API configured)
-        const panCheck = await kyc.verifyPanWithGov(panNumber);
-        if (!panCheck.success) {
-            return failCheck(panCheck.error);
-        }
-
-        // 5. Verify screenshots upload
-        const panFile = req.files?.['panFile']?.[0];
+        // 4. Verify screenshots upload
+        const panFile = req.files?.['panFile']?.[0]; // Reused as secondDocFile
         const aadhaarFile = req.files?.['aadhaarFile']?.[0];
         if (!panFile || !aadhaarFile) {
-            return failCheck("Both PAN/Broker Profile screenshot and Aadhaar Card screenshot are mandatory!");
+            return failCheck("Both Aadhaar Card screenshot and your secondary document (PAN or Broker screenshot) are mandatory!");
         }
 
-        // 6. Gemini Vision Verification
+        // 5. Gemini Vision Verification
         const panBuffer = fs.readFileSync(panFile.path);
-        const panVerify = await vision.verifyDocumentImage(panBuffer, panFile.mimetype, panNumber, "PAN Card / Broker Profile");
+        const expectedText = panNumber || brokerClientId;
+        const docTypeLabel = panNumber ? "PAN Card" : "Broker Profile";
+        const panVerify = await vision.verifyDocumentImage(panBuffer, panFile.mimetype, expectedText, docTypeLabel);
         if (!panVerify.success || !panVerify.isAuthentic || !panVerify.matched) {
             fs.unlinkSync(panFile.path);
             fs.unlinkSync(aadhaarFile.path);
-            return failCheck(`PAN/Broker image verification failed: ${panVerify.reason || "Details do not match or manipulation detected!"}`);
+            return failCheck(`${docTypeLabel} image verification failed: ${panVerify.reason || "Details do not match or manipulation detected!"}`);
         }
 
         const aadhaarBuffer = fs.readFileSync(aadhaarFile.path);
@@ -241,12 +252,12 @@ app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name:
         }
 
         // Anti-bypass duplicate locks
-        if (localDb.checkVerificationIdExists(brokerClientId)) {
+        if (brokerClientId && localDb.checkVerificationIdExists(brokerClientId)) {
             fs.unlinkSync(panFile.path);
             fs.unlinkSync(aadhaarFile.path);
             return failCheck("This Broker Client ID is already registered!");
         }
-        if (localDb.checkVerificationIdExists(panNumber)) {
+        if (panNumber && localDb.checkVerificationIdExists(panNumber)) {
             fs.unlinkSync(panFile.path);
             fs.unlinkSync(aadhaarFile.path);
             return failCheck("This PAN Card Number is already registered!");
@@ -273,7 +284,7 @@ app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name:
         }
 
         // Save local configs (verified status true)
-        localDb.registerUserConfig(data[0].id, data[0].email, data[0].balance, brokerClientId, panNumber, aadhaarNumber, phone, true, panDest, aadhaarDest);
+        localDb.registerUserConfig(data[0].id, data[0].email, data[0].balance, brokerClientId || "N/A", panNumber || "N/A", aadhaarNumber, phone, true, panDest, aadhaarDest);
 
         // Apply referral code if present
         if (referralCode) {
@@ -290,39 +301,129 @@ app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name:
     }
 });
 
+// EXISTING USER REQUEST OTP
+app.post('/api/user/request-otp', authMiddleware, async (req, res) => {
+    try {
+        const { phone } = req.body;
+        const email = req.user.email;
+        if (!phone) {
+            return res.status(400).json({ error: "Mobile number is required!" });
+        }
+
+        // Check if phone already registered (by another user)
+        if (localDb.checkPhoneExists(phone)) {
+            const existingConfig = localDb.getUserConfig(req.user.userId);
+            if (!existingConfig || existingConfig.phone !== phone) {
+                return res.status(400).json({ error: "Mobile number is already registered!" });
+            }
+        }
+
+        // Generate 6-digit verification code
+        const emailOtp = Math.floor(100000 + Math.random() * 900000).toString();
+        const mobileOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // Store OTPs in tempOtps using email
+        tempOtps[email] = {
+            emailOtp,
+            mobileOtp,
+            phone,
+            attempts: 0,
+            expires: Date.now() + 10 * 60 * 1000 // 10 minutes
+        };
+
+        // Send Email OTP
+        await require('./utils/email').sendEmailOtp(email, emailOtp);
+        // Send Mobile OTP
+        await require('./utils/sms').sendMobileOtp(phone, mobileOtp);
+
+        const emailConfigured = !!process.env.EMAIL_USER;
+        const smsConfigured = !!process.env.TWILIO_ACCOUNT_SID;
+
+        res.status(200).json({ 
+            message: "Verification OTPs triggered successfully! Please check your Email and Mobile number.",
+            simulated: !emailConfigured || !smsConfigured,
+            emailOtp: emailConfigured ? undefined : emailOtp,
+            mobileOtp: smsConfigured ? undefined : mobileOtp
+        });
+    } catch (err) {
+        console.error("User OTP request error:", err.message);
+        res.status(500).json({ error: "Failed to trigger OTPs. Please try again." });
+    }
+});
+
 // EXISTING USER DOCUMENT UPLOAD & AI VERIFICATION
 app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'panFile', maxCount: 1 }, { name: 'aadhaarFile', maxCount: 1 }]), async (req, res) => {
     try {
-        const { panNumber, aadhaarNumber, phone, brokerClientId } = req.body;
+        const { panNumber, aadhaarNumber, phone, brokerClientId, emailOtp, mobileOtp } = req.body;
         const userId = req.user.userId;
         const email = req.user.email;
 
-        if (!panNumber || !aadhaarNumber || !phone || !brokerClientId) {
-            return res.status(400).json({ error: "All fields (PAN, Aadhaar, Phone, Broker ID) are required!" });
+        if (!aadhaarNumber || !phone || !emailOtp || !mobileOtp) {
+            return res.status(400).json({ error: "Aadhaar, Phone, and both verification OTPs are required!" });
+        }
+        if (!panNumber && !brokerClientId) {
+            return res.status(400).json({ error: "Either PAN Card or Broker Client ID is required!" });
         }
 
-        // 1. Validate formats
+        // Check if blocklisted
+        if (localDb.isBlocklisted(email, phone)) {
+            return res.status(403).json({ error: "This user/mobile number is blocked due to security reasons!" });
+        }
+
+        // 1. Verify OTPs
+        const stored = tempOtps[email];
+        if (!stored || stored.phone !== phone) {
+            return res.status(400).json({ error: "Session expired or mobile mismatch. Please request OTP again." });
+        }
+        if (Date.now() > stored.expires) {
+            delete tempOtps[email];
+            return res.status(400).json({ error: "OTP expired. Please request a new OTP." });
+        }
+
+        const failCheck = (errMsg) => {
+            stored.attempts += 1;
+            if (stored.attempts >= 3) {
+                localDb.blockUser(email, phone, "Failed signup verification attempts 3 times.");
+                delete tempOtps[email];
+                return res.status(403).json({ error: "You have failed verification 3 times and your identity is now blocked!" });
+            }
+            return res.status(400).json({ error: `${errMsg} (Attempts: ${stored.attempts}/3)` });
+        };
+
+        if (stored.emailOtp !== emailOtp) {
+            return failCheck("Invalid Email verification OTP!");
+        }
+        if (stored.mobileOtp !== mobileOtp) {
+            return failCheck("Invalid Mobile verification OTP!");
+        }
+
+        // Clear verified OTP
+        delete tempOtps[email];
+
+        // 2. Validate Aadhaar using Verhoeff checksum algorithm
         if (!kyc.validateAadhaar(aadhaarNumber)) {
-            return res.status(400).json({ error: "Invalid Aadhaar format structure!" });
+            return failCheck("Invalid Aadhaar format structure!");
         }
-        if (!kyc.validatePANFormat(panNumber)) {
-            return res.status(400).json({ error: "Invalid PAN format structure!" });
+        if (panNumber && !kyc.validatePANFormat(panNumber)) {
+            return failCheck("Invalid PAN format structure!");
         }
 
-        // 2. Verify files present
+        // 3. Verify files present
         const panFile = req.files?.['panFile']?.[0];
         const aadhaarFile = req.files?.['aadhaarFile']?.[0];
         if (!panFile || !aadhaarFile) {
-            return res.status(400).json({ error: "Both PAN Card and Aadhaar Card screenshot files are required!" });
+            return failCheck("Both Aadhaar screenshot and your secondary document (PAN or Broker screenshot) are required!");
         }
 
-        // 3. Gemini Vision AI validation
+        // 4. Gemini Vision AI validation
         const panBuffer = fs.readFileSync(panFile.path);
-        const panVerify = await vision.verifyDocumentImage(panBuffer, panFile.mimetype, panNumber, "PAN Card / Broker Profile");
+        const expectedText = panNumber || brokerClientId;
+        const docTypeLabel = panNumber ? "PAN Card" : "Broker Profile";
+        const panVerify = await vision.verifyDocumentImage(panBuffer, panFile.mimetype, expectedText, docTypeLabel);
         if (!panVerify.success || !panVerify.isAuthentic || !panVerify.matched) {
             fs.unlinkSync(panFile.path);
             fs.unlinkSync(aadhaarFile.path);
-            return res.status(400).json({ error: `PAN/Broker verification failed: ${panVerify.reason || "Details do not match!"}` });
+            return failCheck(`${docTypeLabel} verification failed: ${panVerify.reason || "Details do not match!"}`);
         }
 
         const aadhaarBuffer = fs.readFileSync(aadhaarFile.path);
@@ -330,7 +431,7 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
         if (!aadhaarVerify.success || !aadhaarVerify.isAuthentic || !aadhaarVerify.matched) {
             fs.unlinkSync(panFile.path);
             fs.unlinkSync(aadhaarFile.path);
-            return res.status(400).json({ error: `Aadhaar verification failed: ${aadhaarVerify.reason || "Details do not match!"}` });
+            return failCheck(`Aadhaar verification failed: ${aadhaarVerify.reason || "Details do not match!"}`);
         }
 
         // Move to verified uploads folder
@@ -341,7 +442,7 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
         fs.renameSync(aadhaarFile.path, aadhaarDest);
 
         // Update in localDb
-        localDb.updateUserDocuments(userId, email, phone, brokerClientId, panNumber, aadhaarNumber, panDest, aadhaarDest, true);
+        localDb.updateUserDocuments(userId, email, phone, brokerClientId || "N/A", panNumber || "N/A", aadhaarNumber, panDest, aadhaarDest, true);
 
         res.status(200).json({ message: "Documents verified successfully! Access granted.", verified: true });
     } catch (err) {

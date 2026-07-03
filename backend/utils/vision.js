@@ -12,12 +12,13 @@ async function verifyDocumentImage(imageBuffer, mimeType, expectedId, documentTy
     }
 
     const base64Image = imageBuffer.toString('base64');
-    const prompt = `Analyze this uploaded document screenshot which is supposed to be a ${documentType}.
+    const prompt = `Analyze this uploaded image which is supposed to be a ${documentType}.
 Expected ${documentType} Number / ID to find: "${expectedId}".
 
-You must perform two checks:
-1. ID Verification: Locate and extract the ${documentType} ID/Number from the image. Does it match the expected ID "${expectedId}"? (Case-insensitive check).
-2. Authenticity Check: Look closely for digital alterations. Are there misaligned letters/digits, inconsistent fonts within the ID string, duplicate text overlays, copy-paste artifact borders, or whiteout spots indicating Photoshop/editing? Do not fail blurry or normal camera photos, only flag clear digital modifications of the document contents.
+You must perform three checks:
+1. Document Identification: Check if the uploaded image is actually a valid document of type ${documentType} (e.g., Aadhaar Card, PAN Card, or Broker/Setting Profile page). If the image is a random photograph, selfie, animal, object, landscape, text of a book, or any other unrelated file, you must reject it.
+2. ID Verification: Locate and extract the ${documentType} ID/Number from the image. Does it match the expected ID "${expectedId}"? (Case-insensitive check).
+3. Authenticity Check: Look closely for digital alterations. Are there misaligned letters/digits, inconsistent fonts within the ID string, duplicate text overlays, copy-paste artifact borders, or whiteout spots indicating Photoshop/editing? Do not fail blurry or normal camera photos, only flag clear digital modifications of the document contents.
 
 Respond in strict JSON format:
 {
