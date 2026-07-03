@@ -25,6 +25,15 @@ export default function DashboardPage() {
   const [payMode, setPayMode] = useState<"commission" | "monthly">("commission");
   const [inputReferral, setInputReferral] = useState("");
 
+  const [documentsVerified, setDocumentsVerified] = useState(true);
+  const [checkingVerified, setCheckingVerified] = useState(true);
+  const [verifyAadhaarNo, setVerifyAadhaarNo] = useState("");
+  const [verifyPanNo, setVerifyPanNo] = useState("");
+  const [aadhaarFile, setAadhaarFile] = useState<File | null>(null);
+  const [panFile, setPanFile] = useState<File | null>(null);
+  const [verifyError, setVerifyError] = useState("");
+  const [verifyLoading, setVerifyLoading] = useState(false);
+
   useEffect(() => {
     if (token) {
       fetch("https://securetrade-n3qh.onrender.com/api/referrals", {
@@ -56,7 +65,20 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!token) {
       router.push("/");
+      return;
     }
+
+    fetch("https://securetrade-n3qh.onrender.com/api/balance", {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    .then(res => res.json())
+    .then(data => {
+      setDocumentsVerified(data.documents_verified !== false);
+      setCheckingVerified(false);
+    })
+    .catch(() => {
+      setCheckingVerified(false);
+    });
   }, [token, router]);
 
   const activeIndexName = chartSymbol 
@@ -122,6 +144,134 @@ export default function DashboardPage() {
       <p>Please login first.</p>
     </div>
   );
+
+  const handleVerifyExistingUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setVerifyError("");
+    setVerifyLoading(true);
+
+    if (!panFile || !aadhaarFile) {
+      setVerifyError("Both PAN Card/Broker Profile and Aadhaar Card screenshots are required!");
+      setVerifyLoading(false);
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append("panNumber", verifyPanNo);
+      formData.append("aadhaarNumber", verifyAadhaarNo);
+      formData.append("panFile", panFile);
+      formData.append("aadhaarFile", aadhaarFile);
+
+      const res = await fetch("https://securetrade-n3qh.onrender.com/api/user/verify-documents", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Verification failed");
+      }
+      setDocumentsVerified(true);
+      alert("Verification successful! Dashboard unlocked.");
+    } catch (err: any) {
+      setVerifyError(err.message);
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  if (checkingVerified) {
+    return (
+      <div className="min-h-screen bg-[#0f172a] flex flex-col items-center justify-center text-slate-300 font-extrabold text-xs tracking-widest uppercase">
+        <span className="w-8 h-8 border-4 border-slate-800 border-t-blue-500 rounded-full animate-spin mb-4"></span>
+        <p>Verifying terminal security...</p>
+      </div>
+    );
+  }
+
+  if (!documentsVerified) {
+    return (
+      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl">
+          <div className="text-center mb-6">
+            <h1 className="text-xl font-black text-white tracking-tight">Identity Verification Required 🛡️</h1>
+            <p className="text-slate-400 text-xs mt-2">
+              Bhai, aapke account ki security verify karne ke liye dono government IDs aur unke screenshots upload karna mandatory hai.
+            </p>
+          </div>
+
+          <form onSubmit={handleVerifyExistingUser} className="space-y-4">
+            {verifyError && (
+              <div className="p-4 bg-red-950/50 border border-red-900 text-red-400 text-xs font-bold rounded-xl text-center">
+                ⚠️ {verifyError}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">PAN Card Number</label>
+              <input
+                type="text"
+                required
+                pattern="[A-Z]{5}[0-9]{4}[A-Z]{1}"
+                maxLength={10}
+                value={verifyPanNo}
+                onChange={(e) => setVerifyPanNo(e.target.value.toUpperCase())}
+                className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="ABCDE1234F"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Aadhaar Card Number (12-Digit)</label>
+              <input
+                type="text"
+                required
+                pattern="[0-9]{12}"
+                maxLength={12}
+                value={verifyAadhaarNo}
+                onChange={(e) => setVerifyAadhaarNo(e.target.value.replace(/[^0-9]/g, ''))}
+                className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="123456789012"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">PAN Card / Broker Profile Screenshot</label>
+              <input
+                type="file"
+                required
+                accept="image/*"
+                onChange={(e) => setPanFile(e.target.files?.[0] || null)}
+                className="block w-full text-xs text-slate-450 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Aadhaar Card Screenshot</label>
+              <input
+                type="file"
+                required
+                accept="image/*"
+                onChange={(e) => setAadhaarFile(e.target.files?.[0] || null)}
+                className="block w-full text-xs text-slate-455 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={verifyLoading}
+              className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold rounded-xl transition-all shadow-md active:scale-98 text-xs tracking-wider uppercase disabled:opacity-50"
+            >
+              {verifyLoading ? "Scanning with Vision AI..." : "Verify & Unlock Terminal"}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   const SYMBOLS = ["NIFTY50", "SENSEX", "BANKNIFTY"];
 

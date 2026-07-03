@@ -102,7 +102,23 @@ module.exports = {
         const db = readDb();
         return Object.values(db.users).some(u => u.phone === phone);
     },
-    registerUserConfig: (userId, email, balance, brokerClientId, panNumber, aadhaarNumber, phone) => {
+    isBlocklisted: (email, phone) => {
+        const db = readDb();
+        if (!db.blocklist) db.blocklist = [];
+        return db.blocklist.some(item => 
+            (email && item.email && item.email.toLowerCase() === email.toLowerCase()) ||
+            (phone && item.phone && item.phone === phone)
+        );
+    },
+    blockUser: (email, phone, reason = "Failed verification too many times") => {
+        const db = readDb();
+        if (!db.blocklist) db.blocklist = [];
+        if (!db.blocklist.some(item => (email && item.email.toLowerCase() === email.toLowerCase()) || (phone && item.phone === phone))) {
+            db.blocklist.push({ email, phone, reason, blockedAt: new Date().toISOString() });
+            writeDb(db);
+        }
+    },
+    registerUserConfig: (userId, email, balance, brokerClientId, panNumber, aadhaarNumber, phone, documentsVerified = false, panUrl = "", aadhaarUrl = "") => {
         const db = readDb();
         const codeSuffix = Math.floor(100 + Math.random() * 900);
         const prefix = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '').substring(0, 7).toUpperCase();
@@ -118,9 +134,23 @@ module.exports = {
             referral_days_earned: 0,
             referred_users: [],
             plan_type: 'commission',
+            documents_verified: documentsVerified,
+            pan_url: panUrl,
+            aadhaar_url: aadhaarUrl,
             created_at: new Date().toISOString()
         };
         writeDb(db);
+    },
+    updateUserDocuments: (userId, panUrl, aadhaarUrl, verified = true) => {
+        const db = readDb();
+        if (db.users[userId]) {
+            db.users[userId].pan_url = panUrl;
+            db.users[userId].aadhaar_url = aadhaarUrl;
+            db.users[userId].documents_verified = verified;
+            writeDb(db);
+            return true;
+        }
+        return false;
     },
     getUserConfig: (userId) => {
         const db = readDb();
