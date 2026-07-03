@@ -421,6 +421,8 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     hasNotified15MinAction2: false,
     hasRecommendedSquareOff2: false,
     hasRecommendedAveraging2: false,
+    maxPremium1: 0,
+    maxPremium2: 0,
 
     lastTradedSymbol: "",
     lastExitTime: 0,
@@ -1062,7 +1064,21 @@ export function MarketProvider({ children }: { children: ReactNode }) {
               }
 
               if (currentPremium) {
+                // Update peak premium and PnL for Trailing Stop Loss
+                if (t.id === 1) {
+                  if (!b.maxPremium1 || currentPremium > b.maxPremium1) {
+                    b.maxPremium1 = currentPremium;
+                  }
+                } else {
+                  if (!b.maxPremium2 || currentPremium > b.maxPremium2) {
+                    b.maxPremium2 = currentPremium;
+                  }
+                }
+
+                const peakPremium = t.id === 1 ? (b.maxPremium1 || currentPremium) : (b.maxPremium2 || currentPremium);
                 const pnlPercent = ((currentPremium - t.entryPrice) / t.entryPrice) * 100;
+                const peakPnlPercent = ((peakPremium - t.entryPrice) / t.entryPrice) * 100;
+
                 const elapsedSeconds = Math.floor((Date.now() - t.entryTime) / 1000);
                 const elapsedMinutes = elapsedSeconds / 60;
 
@@ -1122,16 +1138,31 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                   }
                 } catch {}
 
+                // Trailing Stop Loss Logic (TSL) to maximize win rates and let profits run dynamically
+                let trailingSlPct = -maxSl; // Default e.g. -15%
+                let isTrailingActive = false;
+
+                if (peakPnlPercent >= 20) {
+                  trailingSlPct = peakPnlPercent - 10; // Trail 10% below peak
+                  isTrailingActive = true;
+                } else if (peakPnlPercent >= 10) {
+                  trailingSlPct = 2; // Lock stop loss at +2% (guarantees profitable trade!)
+                  isTrailingActive = true;
+                }
+
                 let targetHit = false;
                 let slHit = false;
 
                 if (userTargetPrice && userTargetPrice > 0) {
                   targetHit = t.isShort ? currentPremium <= userTargetPrice : currentPremium >= userTargetPrice;
                 } else {
-                  targetHit = pnlPercent >= maxTarget;
+                  // No fixed target exit so that profits have no upper limit!
+                  targetHit = false;
                 }
 
-                if (userSlPrice && userSlPrice > 0) {
+                if (isTrailingActive) {
+                  slHit = pnlPercent <= trailingSlPct;
+                } else if (userSlPrice && userSlPrice > 0) {
                   slHit = t.isShort ? currentPremium >= userSlPrice : currentPremium <= userSlPrice;
                 } else {
                   slHit = pnlPercent <= -maxSl;
@@ -1145,14 +1176,16 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                   b.lastTradedSymbol = getIndexAndDirection(t.symbol);
                   b.lastExitTime = Date.now();
 
-                  if (t.id === 1) {
+                   if (t.id === 1) {
                     b.hasPosition = false;
                     b.entryPrice = 0;
                     b.entrySymbol = "";
+                    b.maxPremium1 = 0;
                   } else {
                     b.hasSecondPosition = false;
                     b.entryPrice2 = 0;
                     b.entrySymbol2 = "";
+                    b.maxPremium2 = 0;
                   }
 
                   b.cooldown = true;
