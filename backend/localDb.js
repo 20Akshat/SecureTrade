@@ -88,15 +88,19 @@ module.exports = {
         }
         writeDb(db);
     },
-    checkVerificationIdExists: (verificationId) => {
+    checkVerificationIdExists: (id) => {
         const db = readDb();
-        return Object.values(db.users).some(u => u.verification_id === verificationId);
+        return Object.values(db.users).some(u => 
+            (u.verification_id && u.verification_id.toUpperCase() === id.toUpperCase()) ||
+            (u.broker_client_id && u.broker_client_id.toUpperCase() === id.toUpperCase()) ||
+            (u.government_id && u.government_id.toUpperCase() === id.toUpperCase())
+        );
     },
     checkPhoneExists: (phone) => {
         const db = readDb();
         return Object.values(db.users).some(u => u.phone === phone);
     },
-    registerUserConfig: (userId, email, balance, verificationType, verificationId, phone) => {
+    registerUserConfig: (userId, email, balance, brokerClientId, governmentId, phone, verificationType = "PAN_CARD") => {
         const db = readDb();
         const codeSuffix = Math.floor(100 + Math.random() * 900);
         const prefix = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '').substring(0, 7).toUpperCase();
@@ -105,12 +109,15 @@ module.exports = {
             email: email,
             balance: balance,
             verification_type: verificationType,
-            verification_id: verificationId,
+            verification_id: governmentId,
+            broker_client_id: brokerClientId,
+            government_id: governmentId,
             phone: phone,
             referral_code: `${prefix}${codeSuffix}`,
             referral_days_earned: 0,
             referred_users: [],
-            plan_type: 'commission'
+            plan_type: 'commission',
+            created_at: new Date().toISOString()
         };
         writeDb(db);
     },
