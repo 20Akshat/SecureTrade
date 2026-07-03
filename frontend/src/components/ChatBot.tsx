@@ -116,15 +116,18 @@ export default function ChatBot() {
       setSupportMessages((prev) => [...prev, userMsg]);
       setInput("");
       
-      const isCallReq = query.toLowerCase().includes("call") || 
-                        query.toLowerCase().includes("contact") || 
-                        query.toLowerCase().includes("phone") || 
-                        query.toLowerCase().includes("admin");
+      const q = query.toLowerCase().trim();
+      const isPlainCallReq = (q.includes("call") || q.includes("contact") || q.includes("talk") || q.includes("number") || q.includes("phone") || q.includes("admin") || q.includes("akshat")) && 
+                             (q.length < 35) && 
+                             !(q.includes("balance") || q.includes("reset") || q.includes("maintenance") || q.includes("order") || q.includes("sl") || q.includes("target") || q.includes("aadhar") || q.includes("pan") || q.includes("verification") || q.includes("login") || q.includes("signup"));
 
       setTimeout(async () => {
         let responseText = generateSupportResponse(query);
-        
-        if (isCallReq && token) {
+        const isFallback = responseText.includes("Bhai! Platform ke tech support desk par query received");
+
+        if (isPlainCallReq) {
+          responseText = "👋 **Bhai, Admin Akshat se directly contact karne se pehle, please apna exact issue/problem batayein!**\n\nSupport Desk Bot sabhi common queries (balance reset, maintenance, limit order, target/SL setup) ko instantly solve kar sakta hai. Agar aapka issue complex hai aur mujhse solve nahi ho paya, tabhi contact form aur Admin call request activate hogi. Please details mein apna problem likhein!";
+        } else if (isFallback && token) {
           try {
             const res = await fetch("https://securetrade-n3qh.onrender.com/api/support-request", {
               method: "POST",
@@ -132,7 +135,7 @@ export default function ChatBot() {
               body: JSON.stringify({ message: query })
             });
             if (res.ok) {
-              responseText = "📨 **Support Request Submitted!**\n\nBhai, aapki details aur query database mein safely register ho gayi hai. Admin Akshat ke paas request chali gayi hai aur vo apne free time (Saturday/Sunday) par aapse contact karenge!\n\nTab tak agar koi standard system issue ho, toh aap mujhse (Support Desk Bot) yahan pooch sakte hain, main instant solve kar dunga!";
+              responseText = "📨 **Support Request Submitted!**\n\nBhai, ye issue complex lag raha hai aur mere automated systems ise solve nahi kar pa rahe hain. Maine aapki details aur query Admin Akshat ko forward kar di hai!\n\nAdmin Akshat aapse directly register mobile number par call karke baat karenge. Vo **Everyday** (apne free hours mein) aapse call par connect ho jayenge!";
             }
           } catch (err) {
             console.error("Support request error:", err);
