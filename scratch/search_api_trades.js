@@ -1,0 +1,11 @@
+const fs = require('fs');
+const path = require('path');
+
+const filePath = path.join(__dirname, '../backend/server.js');
+const content = fs.readFileSync(filePath, 'utf8');
+
+content.split('\n').forEach((line, idx) => {
+    if (line.includes('/api/trades') || line.includes('/api/portfolio') || line.includes('app.get(\'/api/trades\'')) {
+        console.log(`Line ${idx+1}: ${line.trim()}`);
+    }
+});

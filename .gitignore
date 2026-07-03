@@ -1,0 +1,9 @@
+node_modules/
+.next/
+build/
+dist/
+*.env
+*.log
+backend/local_db.json
+local_db.json
+.gemini/

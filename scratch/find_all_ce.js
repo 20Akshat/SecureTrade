@@ -1,0 +1,26 @@
+const fs = require('fs');
+const path = require('path');
+const supabase = require('../backend/db');
+
+async function run() {
+    console.log("=== LOCAL DB ===");
+    const localDbPath = path.join(__dirname, '../backend/local_db.json');
+    if (fs.existsSync(localDbPath)) {
+        const localDb = JSON.parse(fs.readFileSync(localDbPath, 'utf8'));
+        const matches = localDb.portfolio.filter(p => p.symbol.includes('24200'));
+        console.log("Local DB all 24200 trades count:", matches.length);
+        console.log(JSON.stringify(matches, null, 2));
+    }
+
+    console.log("\n=== SUPABASE ===");
+    const { data, error } = await supabase.from('portfolio').select('*');
+    if (error) {
+        console.error(error);
+    } else {
+        const matches = data.filter(p => p.symbol.includes('24200'));
+        console.log("Supabase all 24200 trades count:", matches.length);
+        console.log(JSON.stringify(matches, null, 2));
+    }
+}
+
+run();
