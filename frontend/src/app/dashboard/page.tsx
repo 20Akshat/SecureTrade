@@ -39,6 +39,29 @@ export default function DashboardPage() {
   const [panFile, setPanFile] = useState<File | null>(null);
   const [verifyError, setVerifyError] = useState("");
   const [verifyLoading, setVerifyLoading] = useState(false);
+  const [notiPermission, setNotiPermission] = useState<string>("granted");
+
+  // Monitor browser notification permission state
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      setNotiPermission(Notification.permission);
+      
+      // Automatic trigger request if default
+      if (Notification.permission === "default") {
+        Notification.requestPermission().then((perm) => {
+          setNotiPermission(perm);
+        });
+      }
+
+      // Check permission state in intervals (in case they allow/block manually)
+      const interval = setInterval(() => {
+        if (Notification.permission !== notiPermission) {
+          setNotiPermission(Notification.permission);
+        }
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [notiPermission]);
 
   useEffect(() => {
     if (token) {
@@ -237,6 +260,47 @@ export default function DashboardPage() {
       <div className="min-h-screen bg-[#0f172a] flex flex-col items-center justify-center text-slate-300 font-extrabold text-xs tracking-widest uppercase">
         <span className="w-8 h-8 border-4 border-slate-800 border-t-blue-500 rounded-full animate-spin mb-4"></span>
         <p>Verifying terminal security...</p>
+      </div>
+    );
+  }
+
+  // ── MANDATORY NOTIFICATION PERMISSION GATING ──
+  if (notiPermission !== "granted") {
+    return (
+      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-850 rounded-3xl p-8 shadow-2xl text-center space-y-6">
+          <div className="w-16 h-16 bg-blue-900/50 text-blue-400 rounded-2xl flex items-center justify-center mx-auto text-3xl font-black animate-pulse">
+            🔔
+          </div>
+          
+          <div className="space-y-2">
+            <h1 className="text-xl font-black text-white tracking-tight">Push Alerts Permission Required</h1>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Browser Notifications Blocked</p>
+          </div>
+
+          <p className="text-xs text-slate-400 font-semibold leading-relaxed">
+            Bhai, live trading signals aur risk mitigation alerts receive karne ke liye browser notification allow karna **mandatory** hai. SecureTrade alerts aur auto-squareoff alerts ke bina nahi chalega!
+          </p>
+
+          <button
+            onClick={async () => {
+              if (typeof window !== "undefined" && "Notification" in window) {
+                const perm = await Notification.requestPermission();
+                setNotiPermission(perm);
+                if (perm !== "granted") {
+                  alert("Bhai, notification block ho chuki hai. Please browser URL bar me Left side Lock (🔒) icon par click karein aur Notifications ko 'Allow' set karein.");
+                }
+              }
+            }}
+            className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold rounded-xl transition-all shadow-md active:scale-98 text-xs tracking-wider uppercase"
+          >
+            Request Notification Permission
+          </button>
+
+          <p className="text-[10px] text-slate-500 font-bold bg-slate-950 p-3 rounded-lg border border-slate-800/50">
+            💡 **Help:** URL bar me domain name ke left side me bane **🔒 Lock / Settings** icon par click karke Permission ko **Allow** karo aur page refresh karo.
+          </p>
+        </div>
       </div>
     );
   }
