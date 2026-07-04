@@ -1,25 +1,7 @@
-const nodemailer = require('nodemailer');
-const fs = require('fs');
-const path = require('path');
-const dns = require('dns');
-
-// Dynamically resolve smtp.gmail.com strictly to its IPv4 address (A-Record)
-function resolveGmailIpv4() {
-    return new Promise((resolve) => {
-        dns.resolve4('smtp.gmail.com', (err, addresses) => {
-            if (err || !addresses || addresses.length === 0) {
-                console.warn("⚠️ DNS resolution for smtp.gmail.com failed, falling back to hostname.");
-                resolve('smtp.gmail.com');
-            } else {
-                console.log(`📡 Resolved smtp.gmail.com to IPv4: ${addresses[0]}`);
-                resolve(addresses[0]);
-            }
-        });
-    });
-}
-
 async function sendEmailOtp(toEmail, otpCode) {
-    // Log to local file
+    // Log to local file for debug reference
+    const fs = require('fs');
+    const path = require('path');
     const logPath = path.join(__dirname, '../../scratch/email_otps.log');
     const dir = path.dirname(logPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -35,44 +17,32 @@ async function sendEmailOtp(toEmail, otpCode) {
         return { success: true, simulated: true };
     }
 
-    const ipAddress = await resolveGmailIpv4();
-
-    // Configure transport with dynamic IPv4 IP, Port 587 & STARTTLS secure false
-    const transporter = nodemailer.createTransport({
-        host: ipAddress,
-        port: 587,
-        secure: false, // TLS
-        auth: { user, pass },
-        connectionTimeout: 10000, 
-        greetingTimeout: 10000,
-        socketTimeout: 15000,
-        tls: {
-            rejectUnauthorized: false // Avoid SSL handshake failure since host is an IP instead of domain name
-        }
-    });
-
-    const mailOptions = {
-        from: `"SecureTrade Verification" <${user}>`,
-        to: toEmail,
-        subject: 'SecureTrade Registration - Email Verification OTP 🔐',
-        html: `
-            <div style="font-family: sans-serif; padding: 20px; color: #1e293b;">
-                <h2 style="color: #2563eb;">SecureTrade Registration</h2>
-                <p>Bhai, thank you for signing up on SecureTrade! Please use the following One-Time Password (OTP) to complete your registration:</p>
-                <div style="font-size: 24px; font-weight: bold; background: #f1f5f9; padding: 15px; text-align: center; border-radius: 8px; margin: 20px 0; color: #0f172a; letter-spacing: 4px;">
-                    ${otpCode}
-                </div>
-                <p style="font-size: 13px; color: #64748b;">This OTP is valid for 10 minutes. Please do not share it with anyone.</p>
-            </div>
-        `
-    };
-
     try {
-        const info = await transporter.sendMail(mailOptions);
-        console.log("Nodemailer response success:", info.response);
-        return { success: true, response: info.response, messageId: info.messageId };
+        // Render blocks raw SMTP TCP outbound ports, but Vercel doesn't.
+        // We route the request securely via Vercel Serverless HTTPS Relay API (Port 443 - never blocked!)
+        const response = await fetch("https://frontend-seven-weld-84.vercel.app/api/send-email", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                toEmail,
+                otpCode,
+                smtpUser: user,
+                smtpPass: pass
+            })
+        });
+
+        const data = await response.json();
+        if (response.ok && data.success) {
+            console.log("Email successfully relayed via Vercel SMTP Bridge!");
+            return { success: true, response: data.response, messageId: data.messageId };
+        } else {
+            console.error("Vercel SMTP Bridge returned error:", data.error || "Unknown error");
+            return { success: false, simulated: false, error: data.error || "Bridge delivery failure" };
+        }
     } catch (err) {
-        console.error("Nodemailer error:", err.message);
+        console.error("Failed to connect to Vercel SMTP Bridge:", err.message);
         return { success: false, simulated: false, error: err.message };
     }
 }
