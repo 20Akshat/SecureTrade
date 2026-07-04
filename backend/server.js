@@ -110,6 +110,20 @@ app.use(express.urlencoded({ extended: true }));
 
 app.get('/', (req, res) => res.json({ message: "SecureTrade API is running! 📈🔒" }));
 
+// DEBUG ENDPOINT TO READ GENERATED EMAIL OTPS
+app.get('/api/debug/email-logs', async (req, res) => {
+    try {
+        const logPath = require('path').join(__dirname, '../scratch/email_otps.log');
+        if (require('fs').existsSync(logPath)) {
+            const content = require('fs').readFileSync(logPath, 'utf8');
+            return res.status(200).send(`<pre>${content}</pre>`);
+        }
+        res.status(200).send("No email logs generated yet.");
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 const tempOtps = {};
 
 const { validateEmail, validatePhone } = require('./utils/validators');
@@ -134,13 +148,12 @@ app.post('/api/user/request-otp', async (req, res) => {
         // Store OTP
         tempOtps[email] = {
             emailOtp,
-            phone,
             attempts: 0,
             expires: Date.now() + 10 * 60 * 1000 // 10 minutes
         };
 
         // Send Email OTP
-        await require('./utils/email').sendEmailOtp(email, emailOtp);
+        const emailResult = await require('./utils/email').sendEmailOtp(email, emailOtp);
 
         const emailConfigured = !!process.env.EMAIL_USER;
 
