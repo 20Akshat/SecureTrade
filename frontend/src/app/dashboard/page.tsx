@@ -11,6 +11,7 @@ import OnboardingTour from "@/components/OnboardingTour";
 import AdminPanel from "@/components/AdminPanel";
 import { TrendingUp, Award, User, Bell, Activity, Target, Zap, Gauge } from "lucide-react";
 
+// Triggering Vercel deployment with connected repository
 export default function DashboardPage() {
   const { token, balance, theme, toggleTheme } = useAuth();
   const router = useRouter();
