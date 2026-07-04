@@ -1,6 +1,7 @@
 const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
+const dns = require('dns');
 
 async function sendEmailOtp(toEmail, otpCode) {
     // Log to local file
@@ -19,7 +20,7 @@ async function sendEmailOtp(toEmail, otpCode) {
         return { success: true, simulated: true };
     }
 
-    // Configure transport with connection timeout limits & force IPv4 (family: 4)
+    // Configure transport with connection timeout limits & force IPv4 on DNS lookup
     const transporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
         port: 465,
@@ -28,7 +29,10 @@ async function sendEmailOtp(toEmail, otpCode) {
         connectionTimeout: 10000, 
         greetingTimeout: 10000,
         socketTimeout: 15000,
-        family: 4 // STRICTLY FORCE IPV4 to bypass Render IPv6 routing issues
+        // Override the DNS resolver to prevent IPv6 lookups on Render cloud servers
+        lookup: (hostname, options, callback) => {
+            dns.lookup(hostname, { family: 4 }, callback);
+        }
     });
 
     const mailOptions = {
