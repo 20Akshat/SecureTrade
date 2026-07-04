@@ -3,6 +3,21 @@ const fs = require('fs');
 const path = require('path');
 const dns = require('dns');
 
+// Dynamically resolve smtp.gmail.com strictly to its IPv4 address (A-Record)
+function resolveGmailIpv4() {
+    return new Promise((resolve) => {
+        dns.resolve4('smtp.gmail.com', (err, addresses) => {
+            if (err || !addresses || addresses.length === 0) {
+                console.warn("⚠️ DNS resolution for smtp.gmail.com failed, falling back to hostname.");
+                resolve('smtp.gmail.com');
+            } else {
+                console.log(`📡 Resolved smtp.gmail.com to IPv4: ${addresses[0]}`);
+                resolve(addresses[0]);
+            }
+        });
+    });
+}
+
 async function sendEmailOtp(toEmail, otpCode) {
     // Log to local file
     const logPath = path.join(__dirname, '../../scratch/email_otps.log');
@@ -20,18 +35,19 @@ async function sendEmailOtp(toEmail, otpCode) {
         return { success: true, simulated: true };
     }
 
-    // Configure transport with Port 587 & secure: false (STARTTLS) to bypass cloud host Port 465 block
+    const ipAddress = await resolveGmailIpv4();
+
+    // Configure transport with dynamic IPv4 IP, Port 587 & STARTTLS secure false
     const transporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
+        host: ipAddress,
         port: 587,
         secure: false, // TLS
         auth: { user, pass },
         connectionTimeout: 10000, 
         greetingTimeout: 10000,
         socketTimeout: 15000,
-        // Override the DNS resolver to prevent IPv6 lookups on Render cloud servers
-        lookup: (hostname, options, callback) => {
-            dns.lookup(hostname, { family: 4 }, callback);
+        tls: {
+            rejectUnauthorized: false // Avoid SSL handshake failure since host is an IP instead of domain name
         }
     });
 
