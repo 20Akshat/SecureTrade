@@ -415,8 +415,8 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
         }
 
         // Check if blocklisted
-        if (localDb.isBlocklisted(email, phone)) {
-            return res.status(403).json({ error: "This user/mobile number is blocked due to security reasons!" });
+        if (localDb.isBlocklisted(email)) {
+            return res.status(403).json({ error: "This user email is blocked due to security reasons!" });
         }
 
         // 1. Verify OTPs
@@ -432,7 +432,7 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
         const failCheck = (errMsg) => {
             stored.attempts += 1;
             if (stored.attempts >= 3) {
-                localDb.blockUser(email, phone || "Not Provided", "Failed signup verification attempts 3 times.");
+                localDb.blockUser(email, "Not Provided", "Failed verification attempts 3 times.");
                 delete tempOtps[email];
                 return res.status(403).json({ error: "You have failed verification 3 times and your identity is now blocked!" });
             }
@@ -496,7 +496,7 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
         fs.renameSync(aadhaarFile.path, aadhaarDest);
 
         // Update in localDb
-        localDb.updateUserDocuments(userId, email, phone, brokerClientId || "N/A", panNumber || "N/A", aadhaarNumber, panDest, aadhaarDest, true);
+        localDb.updateUserDocuments(userId, email, "N/A", brokerClientId || "N/A", panNumber || "N/A", aadhaarNumber, panDest, aadhaarDest, true);
 
         res.status(200).json({ message: "Documents verified successfully! Access granted.", verified: true });
     } catch (err) {
