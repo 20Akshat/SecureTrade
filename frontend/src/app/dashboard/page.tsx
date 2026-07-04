@@ -25,7 +25,7 @@ export default function DashboardPage() {
   const [payMode, setPayMode] = useState<"commission" | "monthly">("commission");
   const [inputReferral, setInputReferral] = useState("");
 
-  const [documentsVerified, setDocumentsVerified] = useState(true);
+  const [documentsVerified, setDocumentsVerified] = useState(false);
   const [checkingVerified, setCheckingVerified] = useState(true);
   const [verifyAadhaarNo, setVerifyAadhaarNo] = useState("");
   const [verifyPanNo, setVerifyPanNo] = useState("");
