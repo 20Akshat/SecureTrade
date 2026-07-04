@@ -150,13 +150,14 @@ app.post('/api/user/request-otp', async (req, res) => {
 
         // Send Email OTP
         const emailResult = await require('./utils/email').sendEmailOtp(email, emailOtp);
-
-        const emailConfigured = !!process.env.EMAIL_USER;
+        const isSim = !emailResult.success || emailResult.simulated;
 
         res.status(200).json({
-            message: "Verification OTP triggered successfully!",
-            simulated: !emailConfigured,
-            emailOtp: emailConfigured ? undefined : emailOtp
+            message: isSim 
+                ? "[Sandbox Mode] SMTP delivery failed. OTP is displayed for testing."
+                : "Verification OTP triggered successfully! Please check your Email.",
+            simulated: isSim,
+            emailOtp: isSim ? emailOtp : undefined
         });
     } catch (err) {
         console.error("OTP request error:", err.message);
@@ -195,14 +196,15 @@ app.post('/api/signup/request-otp', async (req, res) => {
         };
 
         // Send Email OTP
-        await require('./utils/email').sendEmailOtp(email, emailOtp);
-
-        const emailConfigured = !!process.env.EMAIL_USER;
+        const emailResult = await require('./utils/email').sendEmailOtp(email, emailOtp);
+        const isSim = !emailResult.success || emailResult.simulated;
 
         res.status(200).json({ 
-            message: "Verification OTP triggered successfully! Please check your Email.",
-            simulated: !emailConfigured,
-            emailOtp: emailConfigured ? undefined : emailOtp
+            message: isSim
+                ? "[Sandbox Mode] SMTP delivery failed. OTP is displayed for testing."
+                : "Verification OTP triggered successfully! Please check your Email.",
+            simulated: isSim,
+            emailOtp: isSim ? emailOtp : undefined
         });
     } catch (err) {
         console.error("OTP request error:", err.message);
@@ -529,9 +531,11 @@ app.post('/api/login', async (req, res) => {
                 expires: Date.now() + 10 * 60 * 1000
             };
             const emailResult = await require('./utils/email').sendEmailOtp(email, emailOtp);
+            const isSim = !emailResult.success || emailResult.simulated;
             otpInfo = {
                 otpSent: true,
-                simulatedEmail: emailResult.simulated || false
+                simulatedEmail: isSim,
+                emailOtp: isSim ? emailOtp : undefined
             };
         }
 
