@@ -67,12 +67,10 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
         const formData = new FormData();
         formData.append("email", email);
         formData.append("password", password);
-        formData.append("phone", phone);
         formData.append("brokerClientId", signupVerifyMethod === "broker" ? brokerClientId : "");
         formData.append("panNumber", signupVerifyMethod === "pan" ? panNumber : "");
         formData.append("aadhaarNumber", aadhaarNumber);
         formData.append("emailOtp", emailOtp);
-        formData.append("mobileOtp", mobileOtp);
         formData.append("referralCode", referralCode);
         formData.append("panFile", panFile);
         formData.append("aadhaarFile", aadhaarFile);
@@ -91,7 +89,6 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
 
       if (isLogin) {
         // Handle login response
-        if (data.phone) setPhone(data.phone);
         if (data.documents_verified) {
           // User already verified - go straight to dashboard
           onLogin(data.token, data.balance);
@@ -101,20 +98,17 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
           setIsVerificationMode(true);
           // Store OTP info if simulated (demo mode auto-fill)
           if (data.otpSent && data.simulatedEmail && data.emailOtp) setEmailOtp(data.emailOtp);
-          if (data.otpSent && data.simulatedSms && data.mobileOtp) setMobileOtp(data.mobileOtp);
           setError("");
-          alert("Verification required! OTPs have been sent to your registered email and mobile number.");
+          alert("Verification required! Email OTP has been sent to your registered email.");
         }
       } else {
         setIsLogin(true);
         alert("Account created successfully! Please login.");
         setPassword("");
-        setPhone("");
         setPanNumber("");
         setAadhaarNumber("");
         setBrokerClientId("");
         setEmailOtp("");
-        setMobileOtp("");
         setOtpRequested(false);
       }
     } catch (err: any) {
@@ -134,8 +128,6 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
         }
         const formData = new FormData();
         formData.append("emailOtp", emailOtp);
-        formData.append("mobileOtp", mobileOtp);
-        formData.append("phone", phone);
         formData.append("panNumber", loginVerifyMethod === "pan" ? panNumber : "");
         formData.append("brokerClientId", loginVerifyMethod === "broker" ? brokerClientId : "");
         formData.append("aadhaarNumber", aadhaarNumber);
@@ -164,8 +156,8 @@ const handleRequestSignupOtp = async (e: React.MouseEvent) => {
     e.preventDefault();
     setError("");
     
-    if (!email || !phone) {
-      setError("Please fill in both Email and Mobile Number first to request verification OTPs.");
+    if (!email) {
+      setError("Please fill in your Email address first to request verification OTP.");
       return;
     }
 
@@ -174,19 +166,18 @@ const handleRequestSignupOtp = async (e: React.MouseEvent) => {
       const res = await fetch("https://securetrade-n3qh.onrender.com/api/signup/request-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, phone })
+        body: JSON.stringify({ email })
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Failed to trigger OTPs.");
+        throw new Error(data.error || "Failed to trigger OTP.");
       }
       setOtpRequested(true);
       if (data.simulated) {
         setEmailOtp(data.emailOtp || "123456");
-        setMobileOtp(data.mobileOtp || "654321");
-        alert(`Demo Mode: Simulated OTP codes generated!\nEmail OTP: ${data.emailOtp || "123456"}\nMobile OTP: ${data.mobileOtp || "654321"}\n(Auto-filled for convenience!)`);
+        alert(`Demo Mode: Simulated OTP code generated!\nEmail OTP: ${data.emailOtp || "123456"}\n(Auto-filled for convenience!)`);
       } else {
-        alert("Verification OTP codes sent successfully to your Email & Mobile Number!");
+        alert("Verification OTP code sent successfully to your Email!");
       }
     } catch (err: any) {
       setError(err.message);
@@ -352,7 +343,7 @@ const handleRequestSignupOtp = async (e: React.MouseEvent) => {
           <div className="text-center mb-2">
             <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center font-black text-white text-lg mx-auto mb-3">🛡️</div>
             <h1 className="text-xl font-black text-white tracking-tight">Identity Verification Required</h1>
-            <p className="text-slate-400 text-xs mt-2">OTPs have been sent to your registered email and mobile. Fill in details below to unlock access.</p>
+            <p className="text-slate-400 text-xs mt-2">An OTP has been sent to your registered email address. Fill in details below to unlock access.</p>
           </div>
 
           {error && (
@@ -376,19 +367,6 @@ const handleRequestSignupOtp = async (e: React.MouseEvent) => {
               />
             </div>
 
-            {/* Mobile OTP */}
-            <div>
-              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Mobile Verification OTP</label>
-              <input
-                type="text"
-                required
-                maxLength={6}
-                value={mobileOtp}
-                onChange={(e) => setMobileOtp(e.target.value.replace(/[^0-9]/g, ''))}
-                className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white tracking-widest text-center font-black focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
-                placeholder="Mobile OTP"
-              />
-            </div>
 
             {/* Aadhaar Number */}
             <div>
@@ -527,6 +505,11 @@ const handleRequestSignupOtp = async (e: React.MouseEvent) => {
                 placeholder="trader@secure.com"
               />
             </div>
+            {!isLogin && (
+              <p className="mt-1.5 text-[10px] text-amber-600 font-bold bg-amber-50 border border-amber-100 p-2 rounded-lg">
+                ⚠️ Bhai, personal email hi use karna fast processing ke liye. Fake/disposable email domain use karne par account automatic block ho sakta hai.
+              </p>
+            )}
           </div>
 
           <div>
@@ -559,23 +542,6 @@ const handleRequestSignupOtp = async (e: React.MouseEvent) => {
 
           {!isLogin && (
             <>
-              <div>
-                <label className="block text-slate-500 mb-1.5 ml-1">Mobile Number (For SMS Alerts)</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Phone className="h-4.5 w-4.5 text-slate-400" />
-                  </div>
-                  <input
-                    type="tel"
-                    required
-                    pattern="[0-9]{10}"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="block w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    placeholder="9876543210"
-                  />
-                </div>
-              </div>
 
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-2">
                 <label className="block text-slate-600 text-xs font-bold mb-1">Verify Secondary Identity Using:</label>
@@ -722,31 +688,13 @@ const handleRequestSignupOtp = async (e: React.MouseEvent) => {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-slate-500 mb-1.5 ml-1">Mobile Verification OTP (6-Digit)</label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                        <Lock className="h-4.5 w-4.5 text-slate-400" />
-                      </div>
-                      <input
-                        type="text"
-                        required
-                        maxLength={6}
-                        value={mobileOtp}
-                        onChange={(e) => setMobileOtp(e.target.value.replace(/[^0-9]/g, ''))}
-                        className="block w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                        placeholder="e.g. 654321"
-                      />
-                    </div>
-                  </div>
-
                   <div className="text-right">
                     <button
                       type="button"
                       onClick={handleRequestSignupOtp}
                       className="text-xs text-blue-600 hover:text-blue-500 font-bold"
                     >
-                      Resend OTP Codes
+                      Resend OTP Code
                     </button>
                   </div>
                 </>

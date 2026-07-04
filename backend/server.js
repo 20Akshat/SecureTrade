@@ -131,14 +131,12 @@ app.post('/api/user/request-otp', async (req, res) => {
             return res.status(400).json({ error: "Mobile number does not match registered user." });
         }
 
-        // Generate OTPs
+        // Generate Email OTP
         const emailOtp = Math.floor(100000 + Math.random() * 900000).toString();
-        const mobileOtp = Math.floor(100000 + Math.random() * 900000).toString();
 
-        // Store OTPs
+        // Store OTP
         tempOtps[email] = {
             emailOtp,
-            mobileOtp,
             phone,
             attempts: 0,
             expires: Date.now() + 10 * 60 * 1000 // 10 minutes
@@ -146,17 +144,13 @@ app.post('/api/user/request-otp', async (req, res) => {
 
         // Send Email OTP
         await require('./utils/email').sendEmailOtp(email, emailOtp);
-        // Send Mobile OTP
-        await require('./utils/sms').sendMobileOtp(phone, mobileOtp);
 
         const emailConfigured = !!process.env.EMAIL_USER;
-        const smsConfigured = !!process.env.TWILIO_ACCOUNT_SID;
 
         res.status(200).json({
-            message: "Verification OTPs triggered successfully!",
-            simulated: !emailConfigured || !smsConfigured,
-            emailOtp: emailConfigured ? undefined : emailOtp,
-            mobileOtp: smsConfigured ? undefined : mobileOtp
+            message: "Verification OTP triggered successfully!",
+            simulated: !emailConfigured,
+            emailOtp: emailConfigured ? undefined : emailOtp
         });
     } catch (err) {
         console.error("OTP request error:", err.message);
@@ -195,12 +189,10 @@ app.post('/api/signup/request-otp', async (req, res) => {
 
         // Generate 6-digit verification code
         const emailOtp = Math.floor(100000 + Math.random() * 900000).toString();
-        const mobileOtp = Math.floor(100000 + Math.random() * 900000).toString();
 
-        // Store OTPs
+        // Store OTP
         tempOtps[email] = {
             emailOtp,
-            mobileOtp,
             phone,
             attempts: 0,
             expires: Date.now() + 10 * 60 * 1000 // 10 minutes
@@ -208,17 +200,13 @@ app.post('/api/signup/request-otp', async (req, res) => {
 
         // Send Email OTP
         await require('./utils/email').sendEmailOtp(email, emailOtp);
-        // Send Mobile OTP
-        await require('./utils/sms').sendMobileOtp(phone, mobileOtp);
 
         const emailConfigured = !!process.env.EMAIL_USER;
-        const smsConfigured = !!process.env.TWILIO_ACCOUNT_SID;
 
         res.status(200).json({ 
-            message: "Verification OTPs triggered successfully! Please check your Email and Mobile number.",
-            simulated: !emailConfigured || !smsConfigured,
-            emailOtp: emailConfigured ? undefined : emailOtp,
-            mobileOtp: smsConfigured ? undefined : mobileOtp
+            message: "Verification OTP triggered successfully! Please check your Email.",
+            simulated: !emailConfigured,
+            emailOtp: emailConfigured ? undefined : emailOtp
         });
     } catch (err) {
         console.error("OTP request error:", err.message);
@@ -229,8 +217,8 @@ app.post('/api/signup/request-otp', async (req, res) => {
 // SIGNUP
 app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name: 'aadhaarFile', maxCount: 1 }]), async (req, res) => {
     try {
-        const { email, password, phone, brokerClientId, panNumber, aadhaarNumber, emailOtp, mobileOtp, referralCode } = req.body;
-        if (!email || !password || !phone || !aadhaarNumber || !emailOtp || !mobileOtp) {
+        const { email, password, phone, brokerClientId, panNumber, aadhaarNumber, emailOtp, referralCode } = req.body;
+        if (!email || !password || !phone || !aadhaarNumber || !emailOtp) {
             return res.status(400).json({ error: "All profile and verification OTP fields are required!" });
         }
         if (!panNumber && !brokerClientId) {
@@ -436,12 +424,12 @@ app.post('/api/user/request-otp', authMiddleware, async (req, res) => {
 // EXISTING USER DOCUMENT UPLOAD & AI VERIFICATION
 app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'panFile', maxCount: 1 }, { name: 'aadhaarFile', maxCount: 1 }]), async (req, res) => {
     try {
-        const { panNumber, aadhaarNumber, phone, brokerClientId, emailOtp, mobileOtp } = req.body;
+        const { panNumber, aadhaarNumber, brokerClientId, emailOtp } = req.body;
         const userId = req.user.userId;
         const email = req.user.email;
 
-        if (!aadhaarNumber || !phone || !emailOtp || !mobileOtp) {
-            return res.status(400).json({ error: "Aadhaar, Phone, and both verification OTPs are required!" });
+        if (!aadhaarNumber || !emailOtp) {
+            return res.status(400).json({ error: "Aadhaar number and Email verification OTP are required!" });
         }
         if (!panNumber && !brokerClientId) {
             return res.status(400).json({ error: "Either PAN Card or Broker Client ID is required!" });
@@ -461,15 +449,11 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
             delete tempOtps[email];
             return res.status(400).json({ error: "OTP expired. Please login again to get new OTPs." });
         }
-        // Phone mismatch check — only if OTP was generated with a specific phone
-        if (stored.phone && stored.phone !== phone) {
-            return res.status(400).json({ error: "Mobile number does not match the one used for OTP. Please use the same number." });
-        }
 
         const failCheck = (errMsg) => {
             stored.attempts += 1;
             if (stored.attempts >= 3) {
-                localDb.blockUser(email, phone, "Failed signup verification attempts 3 times.");
+                localDb.blockUser(email, phone || "Not Provided", "Failed signup verification attempts 3 times.");
                 delete tempOtps[email];
                 return res.status(403).json({ error: "You have failed verification 3 times and your identity is now blocked!" });
             }
@@ -478,9 +462,6 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
 
         if (stored.emailOtp !== emailOtp) {
             return failCheck("Invalid Email verification OTP!");
-        }
-        if (stored.mobileOtp !== mobileOtp) {
-            return failCheck("Invalid Mobile verification OTP!");
         }
 
         // Clear verified OTP
@@ -561,24 +542,19 @@ app.post('/api/login', async (req, res) => {
         const userConfig = localDb.getUserConfig(data.id) || {};
         const isVerified = !!userConfig.documents_verified;
 
-        // If not verified, generate and send OTPs (email & SMS)
+        // If not verified, generate and send Email OTP
         let otpInfo = { otpSent: false };
         if (!isVerified) {
             const emailOtp = Math.floor(100000 + Math.random() * 900000).toString();
-            const mobileOtp = Math.floor(100000 + Math.random() * 900000).toString();
             tempOtps[email] = {
                 emailOtp,
-                mobileOtp,
-                phone: userConfig.phone || "",
                 attempts: 0,
                 expires: Date.now() + 10 * 60 * 1000
             };
             const emailResult = await require('./utils/email').sendEmailOtp(email, emailOtp);
-            const smsResult = await require('./utils/sms').sendMobileOtp(userConfig.phone || "", mobileOtp);
             otpInfo = {
                 otpSent: true,
-                simulatedEmail: emailResult.simulated || false,
-                simulatedSms: smsResult.simulated || false
+                simulatedEmail: emailResult.simulated || false
             };
         }
 
@@ -837,17 +813,16 @@ app.delete('/api/limit-order/:orderId', authMiddleware, async (req, res) => {
 // CREATE SUPPORT CALLBACK REQUEST
 app.post('/api/support-request', authMiddleware, async (req, res) => {
     try {
-        const { message } = req.body;
+        const { message, phone } = req.body;
         const userId = req.user.userId;
-        const userConfig = localDb.getUserConfig(userId) || {};
         
         const request = localDb.addSupportRequest(
             userId,
             req.user.email,
-            userConfig.phone || "Not Set",
+            phone || "Not Provided",
             message || "Tech support query from terminal"
         );
-        console.log(`🔧 [Support Request Raised] User ${req.user.email} requested callback: ${message}`);
+        console.log(`🔧 [Support Request Raised] User ${req.user.email} requested callback: ${message} (Contact: ${phone})`);
         res.status(201).json({ success: true, message: "Callback request registered. Admin will contact you shortly! 📞", request });
     } catch (err) {
         res.status(500).json({ error: "Failed to submit support request." });

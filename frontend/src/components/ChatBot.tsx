@@ -18,6 +18,8 @@ export default function ChatBot() {
   const [positions, setPositions] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<"advisor" | "support">("advisor");
   const [supportMessages, setSupportMessages] = useState<Message[]>([]);
+  const [awaitingPhoneNumber, setAwaitingPhoneNumber] = useState(false);
+  const [pendingSupportQuery, setPendingSupportQuery] = useState("");
 
   useEffect(() => {
     setSupportMessages([
@@ -115,6 +117,49 @@ export default function ChatBot() {
     if (activeTab === "support") {
       setSupportMessages((prev) => [...prev, userMsg]);
       setInput("");
+
+      // If already waiting for contact number to complete support request
+      if (awaitingPhoneNumber) {
+        const cleanedPhone = query.replace(/\s/g, "");
+        if (!/^[6-9][0-9]{9}$/.test(cleanedPhone)) {
+          setTimeout(() => {
+            const botMsg: Message = { 
+              sender: "bot", 
+              text: "⚠️ **Invalid Number!** Bhai, please ek valid 10-digit Indian Mobile Number enter karein (starting with 6, 7, 8 or 9) taaki Admin aapse contact kar sakein.", 
+              timestamp: new Date() 
+            };
+            setSupportMessages((prev) => [...prev, botMsg]);
+          }, 450);
+          return;
+        }
+
+        setAwaitingPhoneNumber(false);
+        const savedQuery = pendingSupportQuery;
+        setPendingSupportQuery("");
+
+        setTimeout(async () => {
+          let responseText = "";
+          try {
+            const res = await fetch("https://securetrade-n3qh.onrender.com/api/support-request", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ message: savedQuery, phone: cleanedPhone })
+            });
+            if (res.ok) {
+              responseText = `📨 **Support Request Submitted!**\n\nBhai, maine aapki details, query aur contact number (**${cleanedPhone}**) Admin Akshat ko forward kar di hai!\n\nAdmin Akshat aapse is number par call ya WhatsApp ke through directly contact kar lenge very soon! 📞`;
+            } else {
+              const data = await res.json();
+              responseText = `⚠️ **Error:** ${data.error || "Failed to submit request."}`;
+            }
+          } catch (err) {
+            responseText = "⚠️ Connection issue. Support request submit nahi ho payi, please baad mein try karein.";
+          }
+
+          const botMsg: Message = { sender: "bot", text: responseText, timestamp: new Date() };
+          setSupportMessages((prev) => [...prev, botMsg]);
+        }, 500);
+        return;
+      }
       
       const q = query.toLowerCase().trim();
       const isPlainCallReq = (q.includes("call") || q.includes("contact") || q.includes("talk") || q.includes("number") || q.includes("phone") || q.includes("admin") || q.includes("akshat")) && 
@@ -127,23 +172,19 @@ export default function ChatBot() {
 
         if (isPlainCallReq) {
           responseText = "👋 **Bhai, Admin Akshat se directly contact karne se pehle, please apna exact issue/problem batayein!**\n\nSupport Desk Bot sabhi common queries (balance reset, maintenance, limit order, target/SL setup) ko instantly solve kar sakta hai. Agar aapka issue complex hai aur mujhse solve nahi ho paya, tabhi contact form aur Admin call request activate hogi. Please details mein apna problem likhein!";
+          const botMsg: Message = { sender: "bot", text: responseText, timestamp: new Date() };
+          setSupportMessages((prev) => [...prev, botMsg]);
         } else if (isFallback && token) {
-          try {
-            const res = await fetch("https://securetrade-n3qh.onrender.com/api/support-request", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-              body: JSON.stringify({ message: query })
-            });
-            if (res.ok) {
-              responseText = "📨 **Support Request Submitted!**\n\nBhai, ye issue complex lag raha hai aur mere automated systems ise solve nahi kar pa rahe hain. Maine aapki details aur query Admin Akshat ko forward kar di hai!\n\nAdmin Akshat aapse directly register mobile number par call karke baat karenge. Vo **Everyday** (apne free hours mein) aapse call par connect ho jayenge!";
-            }
-          } catch (err) {
-            console.error("Support request error:", err);
-          }
+          // Trigger interactive phone verification instead of direct call
+          setPendingSupportQuery(query);
+          setAwaitingPhoneNumber(true);
+          const contactRequestText = "📨 **Complex Issue Detected!**\n\nBhai, ye query complex lag rahi hai. Main aapki ye request Admin Akshat ko forward kar raha hoon.\n\n👉 **Please apna 10-Digit Contact Number enter karein** taaki Admin aapse call par connect kar sakein:";
+          const botMsg: Message = { sender: "bot", text: contactRequestText, timestamp: new Date() };
+          setSupportMessages((prev) => [...prev, botMsg]);
+        } else {
+          const botMsg: Message = { sender: "bot", text: responseText, timestamp: new Date() };
+          setSupportMessages((prev) => [...prev, botMsg]);
         }
-        
-        const botMsg: Message = { sender: "bot", text: responseText, timestamp: new Date() };
-        setSupportMessages((prev) => [...prev, botMsg]);
       }, 550);
     } else {
       setMessages((prev) => [...prev, userMsg]);

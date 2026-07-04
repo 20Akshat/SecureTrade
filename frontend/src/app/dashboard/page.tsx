@@ -154,11 +154,6 @@ export default function DashboardPage() {
   const handleSendVerifyOtps = async (e: React.FormEvent) => {
     e.preventDefault();
     setVerifyError("");
-    
-    if (!verifyPhone) {
-      setVerifyError("Please fill in your Mobile Number first to request verification OTPs.");
-      return;
-    }
 
     // Decode JWT to extract email (fallback to empty if decoding fails)
     let email = "";
@@ -177,19 +172,18 @@ export default function DashboardPage() {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({ email, phone: verifyPhone })
+        body: JSON.stringify({ email })
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Failed to trigger OTPs.");
+        throw new Error(data.error || "Failed to trigger OTP.");
       }
       setVerifyOtpRequested(true);
       if (data.simulated) {
         setVerifyEmailOtp(data.emailOtp || "123456");
-        setVerifyMobileOtp(data.mobileOtp || "654321");
-        alert(`Demo Mode: Simulated OTP codes generated!\nEmail OTP: ${data.emailOtp || "123456"}\nMobile OTP: ${data.mobileOtp || "654321"}\n(Auto-filled for convenience!)`);
+        alert(`Demo Mode: Simulated OTP code generated!\nEmail OTP: ${data.emailOtp || "123456"}\n(Auto-filled for convenience!)`);
       } else {
-        alert("Verification OTP codes sent successfully to your Email & Mobile Number!");
+        alert("Verification OTP code sent successfully to your Email!");
       }
     } catch (err: any) {
       setVerifyError(err.message);
@@ -214,9 +208,7 @@ export default function DashboardPage() {
       formData.append("panNumber", verifyMethod === "pan" ? verifyPanNo : "");
       formData.append("brokerClientId", verifyMethod === "broker" ? verifyBrokerId : "");
       formData.append("aadhaarNumber", verifyAadhaarNo);
-      formData.append("phone", verifyPhone);
       formData.append("emailOtp", verifyEmailOtp);
-      formData.append("mobileOtp", verifyMobileOtp);
       formData.append("panFile", panFile);
       formData.append("aadhaarFile", aadhaarFile);
 
@@ -267,28 +259,13 @@ export default function DashboardPage() {
               </div>
             )}
 
-            <div>
-              <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Mobile Number (For SMS Alerts)</label>
-              <input
-                type="tel"
-                required
-                disabled={verifyOtpRequested}
-                pattern="[0-9]{10}"
-                maxLength={10}
-                value={verifyPhone}
-                onChange={(e) => setVerifyPhone(e.target.value)}
-                className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                placeholder="9876543210"
-              />
-            </div>
-
             {!verifyOtpRequested ? (
               <button
                 type="submit"
                 disabled={verifyLoading}
                 className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold rounded-xl transition-all shadow-md active:scale-98 text-xs tracking-wider uppercase disabled:opacity-50"
               >
-                {verifyLoading ? "Requesting OTPs..." : "Request Verification OTPs"}
+                {verifyLoading ? "Requesting OTP..." : "Request Verification Email OTP"}
               </button>
             ) : (
               <>
@@ -375,18 +352,6 @@ export default function DashboardPage() {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">Mobile Verification OTP (6-Digit)</label>
-                  <input
-                    type="text"
-                    required
-                    maxLength={6}
-                    value={verifyMobileOtp}
-                    onChange={(e) => setVerifyMobileOtp(e.target.value.replace(/[^0-9]/g, ''))}
-                    className="block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="654321"
-                  />
-                </div>
 
                 <div>
                   <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5 ml-1">
