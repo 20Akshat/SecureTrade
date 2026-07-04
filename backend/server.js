@@ -112,6 +112,16 @@ app.get('/', (req, res) => res.json({ message: "SecureTrade API is running! 📈
 
 const tempOtps = {};
 
+// TEST EMAIL ENDPOINT
+app.get('/api/debug/test-email', async (req, res) => {
+    try {
+        const result = await require('./utils/email').sendEmailOtp("akshatmarwadi5@gmail.com", "999999");
+        res.json({ message: "Test trigger completed", result });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 const { validateEmail, validatePhone } = require('./utils/validators');
 
 // REQUEST OTP FOR EXISTING USER (Login verification)

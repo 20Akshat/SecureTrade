@@ -48,8 +48,9 @@ async function sendEmailOtp(toEmail, otpCode) {
     };
 
     try {
-        await transporter.sendMail(mailOptions);
-        return { success: true };
+        const info = await transporter.sendMail(mailOptions);
+        console.log("Nodemailer response success:", info.response);
+        return { success: true, response: info.response, messageId: info.messageId };
     } catch (err) {
         console.error("Nodemailer error:", err.message);
         return { success: false, simulated: false, error: err.message };
