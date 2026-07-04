@@ -7,13 +7,30 @@ const DB_FILE = path.join(__dirname, 'local_db.json');
 function readDb() {
     try {
         if (!fs.existsSync(DB_FILE)) {
-            // Seed initial data from supabase if possible, or use defaults
-            return { users: {}, portfolio: [] };
+            const initial = { users: {}, portfolio: [], limit_orders: [], payment_requests: [], support_requests: [], blocklist: [] };
+            fs.writeFileSync(DB_FILE, JSON.stringify(initial, null, 2));
+            return initial;
         }
-        return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-    } catch (e) {
-        console.error("Error reading local DB:", e);
-        return { users: {}, portfolio: [] };
+        const data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+        
+        // ── AUTO PRIVACY CLEANUP: Delete all user phone fields if exists ──
+        let modified = false;
+        if (data.users) {
+            for (const userId in data.users) {
+                if (data.users[userId].phone !== undefined) {
+                    delete data.users[userId].phone;
+                    modified = true;
+                }
+            }
+        }
+        if (modified) {
+            fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+        }
+
+        return data;
+    } catch (err) {
+        console.error("LocalDB Read Error:", err.message);
+        return { users: {}, portfolio: [], limit_orders: [], payment_requests: [], support_requests: [], blocklist: [] };
     }
 }
 
@@ -129,7 +146,6 @@ module.exports = {
             broker_client_id: brokerClientId,
             pan_number: panNumber,
             aadhaar_number: aadhaarNumber,
-            phone: phone,
             referral_code: `${prefix}${codeSuffix}`,
             referral_days_earned: 0,
             referred_users: [],
@@ -153,7 +169,6 @@ module.exports = {
                 broker_client_id: brokerClientId || "PENDING",
                 pan_number: panNumber,
                 aadhaar_number: aadhaarNumber,
-                phone: phone || "9999999999",
                 referral_code: `${prefix}${codeSuffix}`,
                 referral_days_earned: 0,
                 referred_users: [],
@@ -168,7 +183,6 @@ module.exports = {
             db.users[userId].aadhaar_url = aadhaarUrl;
             if (panNumber) db.users[userId].pan_number = panNumber;
             if (aadhaarNumber) db.users[userId].aadhaar_number = aadhaarNumber;
-            if (phone) db.users[userId].phone = phone;
             if (brokerClientId) db.users[userId].broker_client_id = brokerClientId;
             db.users[userId].documents_verified = verified;
         }

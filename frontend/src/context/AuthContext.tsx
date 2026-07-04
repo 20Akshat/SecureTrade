@@ -43,8 +43,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Load persisted auth data on client mount to avoid Next.js hydration mismatches
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const savedToken = localStorage.getItem("st_token");
-      const savedBalance = localStorage.getItem("st_balance");
+      const savedToken = sessionStorage.getItem("st_token");
+      const savedBalance = sessionStorage.getItem("st_balance");
       if (savedToken) setToken(savedToken);
       if (savedBalance) setBalance(parseFloat(savedBalance));
     }
@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const data = await res.json();
           if (typeof data.balance === "number") {
             setBalance(data.balance);
-            localStorage.setItem("st_balance", data.balance.toString());
+            sessionStorage.setItem("st_balance", data.balance.toString());
           }
         }
       } catch (err: any) {
@@ -81,8 +81,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(newToken);
     setBalance(newBalance);
     if (typeof window !== "undefined") {
-      localStorage.setItem("st_token", newToken);
-      localStorage.setItem("st_balance", newBalance.toString());
+      sessionStorage.setItem("st_token", newToken);
+      sessionStorage.setItem("st_balance", newBalance.toString());
     }
   }, []);
 
@@ -90,10 +90,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setBalance(0);
     if (typeof window !== "undefined") {
-      localStorage.removeItem("st_token");
-      localStorage.removeItem("st_balance");
+      sessionStorage.removeItem("st_token");
+      sessionStorage.removeItem("st_balance");
       if (isExpired) {
-        localStorage.setItem("st_session_expired", "true");
+        sessionStorage.setItem("st_session_expired", "true");
       }
     }
   }, []);
@@ -101,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateBalance = useCallback((newBalance: number) => {
     setBalance(newBalance);
     if (typeof window !== "undefined") {
-      localStorage.setItem("st_balance", newBalance.toString());
+      sessionStorage.setItem("st_balance", newBalance.toString());
     }
   }, []);
 

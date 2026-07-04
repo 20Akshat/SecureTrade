@@ -117,18 +117,15 @@ const { validateEmail, validatePhone } = require('./utils/validators');
 // REQUEST OTP FOR EXISTING USER (Login verification)
 app.post('/api/user/request-otp', async (req, res) => {
     try {
-        const { email, phone } = req.body;
-        if (!email || !phone) {
-            return res.status(400).json({ error: "Email and phone number are required!" });
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ error: "Email is required!" });
         }
 
         // Verify user exists
         const userRes = await supabase.from('users').select('id').eq('email', email).single();
         if (!userRes.data) {
             return res.status(404).json({ error: "User not found. Please signup first." });
-        }
-        if (!localDb.checkPhoneExists(phone)) {
-            return res.status(400).json({ error: "Mobile number does not match registered user." });
         }
 
         // Generate Email OTP
@@ -161,9 +158,9 @@ app.post('/api/user/request-otp', async (req, res) => {
 // REQUEST SIGNUP OTP
 app.post('/api/signup/request-otp', async (req, res) => {
     try {
-        const { email, phone } = req.body;
-        if (!email || !phone) {
-            return res.status(400).json({ error: "Email and phone number are required!" });
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ error: "Email address is required!" });
         }
 
         // Validate email format + check for disposable domains
@@ -172,19 +169,10 @@ app.post('/api/signup/request-otp', async (req, res) => {
             return res.status(400).json({ error: emailCheck.error });
         }
 
-        // Validate phone number (10-digit Indian mobile)
-        const phoneCheck = validatePhone(phone);
-        if (!phoneCheck.valid) {
-            return res.status(400).json({ error: phoneCheck.error });
-        }
-
-        // Check if phone or email already registered in Supabase
+        // Check if email already registered in Supabase
         const emailExists = await supabase.from('users').select('id').eq('email', email);
         if (emailExists.data && emailExists.data.length > 0) {
             return res.status(400).json({ error: "Email is already registered!" });
-        }
-        if (localDb.checkPhoneExists(phone)) {
-            return res.status(400).json({ error: "Mobile number is already registered!" });
         }
 
         // Generate 6-digit verification code
@@ -193,7 +181,6 @@ app.post('/api/signup/request-otp', async (req, res) => {
         // Store OTP
         tempOtps[email] = {
             emailOtp,
-            phone,
             attempts: 0,
             expires: Date.now() + 10 * 60 * 1000 // 10 minutes
         };
@@ -238,8 +225,8 @@ app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name:
         }
 
         // Check if blocklisted
-        if (localDb.isBlocklisted(email, phone)) {
-            return res.status(403).json({ error: "This user/mobile number is blocked due to security reasons!" });
+        if (localDb.isBlocklisted(email)) {
+            return res.status(403).json({ error: "This user email is blocked due to security reasons!" });
         }
 
         // 1. Verify OTPs and increment attempts on failure
@@ -255,7 +242,7 @@ app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name:
         const failCheck = (errMsg) => {
             stored.attempts += 1;
             if (stored.attempts >= 3) {
-                localDb.blockUser(email, phone, "Failed signup verification attempts 3 times.");
+                localDb.blockUser(email, "Not Provided", "Failed signup verification attempts 3 times.");
                 delete tempOtps[email];
                 return res.status(403).json({ error: "You have failed verification 3 times and your identity is now blocked!" });
             }
@@ -354,7 +341,7 @@ app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name:
         }
 
         // Save local configs (verified status true)
-        localDb.registerUserConfig(data[0].id, data[0].email, data[0].balance, brokerClientId || "N/A", panNumber || "N/A", aadhaarNumber, phone, true, panDest, aadhaarDest);
+        localDb.registerUserConfig(data[0].id, data[0].email, data[0].balance, brokerClientId || "N/A", panNumber || "N/A", aadhaarNumber, "N/A", true, panDest, aadhaarDest);
 
         // Apply referral code if present
         if (referralCode) {
@@ -374,46 +361,27 @@ app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name:
 // EXISTING USER REQUEST OTP
 app.post('/api/user/request-otp', authMiddleware, async (req, res) => {
     try {
-        const { phone } = req.body;
         const email = req.user.email;
-        if (!phone) {
-            return res.status(400).json({ error: "Mobile number is required!" });
-        }
-
-        // Check if phone already registered (by another user)
-        if (localDb.checkPhoneExists(phone)) {
-            const existingConfig = localDb.getUserConfig(req.user.userId);
-            if (!existingConfig || existingConfig.phone !== phone) {
-                return res.status(400).json({ error: "Mobile number is already registered!" });
-            }
-        }
 
         // Generate 6-digit verification code
         const emailOtp = Math.floor(100000 + Math.random() * 900000).toString();
-        const mobileOtp = Math.floor(100000 + Math.random() * 900000).toString();
 
-        // Store OTPs in tempOtps using email
+        // Store OTP in tempOtps using email
         tempOtps[email] = {
             emailOtp,
-            mobileOtp,
-            phone,
             attempts: 0,
             expires: Date.now() + 10 * 60 * 1000 // 10 minutes
         };
 
         // Send Email OTP
         await require('./utils/email').sendEmailOtp(email, emailOtp);
-        // Send Mobile OTP
-        await require('./utils/sms').sendMobileOtp(phone, mobileOtp);
 
         const emailConfigured = !!process.env.EMAIL_USER;
-        const smsConfigured = !!process.env.TWILIO_ACCOUNT_SID;
 
         res.status(200).json({ 
-            message: "Verification OTPs triggered successfully! Please check your Email and Mobile number.",
-            simulated: !emailConfigured || !smsConfigured,
-            emailOtp: emailConfigured ? undefined : emailOtp,
-            mobileOtp: smsConfigured ? undefined : mobileOtp
+            message: "Verification OTP triggered successfully! Please check your Email.",
+            simulated: !emailConfigured,
+            emailOtp: emailConfigured ? undefined : emailOtp
         });
     } catch (err) {
         console.error("User OTP request error:", err.message);
