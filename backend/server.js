@@ -124,6 +124,16 @@ app.get('/api/debug/email-logs', async (req, res) => {
     }
 });
 
+// TEST EMAIL ENDPOINT TO DIAGNOSE SMTP ON LIVE SERVER
+app.get('/api/debug/test-email', async (req, res) => {
+    try {
+        const result = await require('./utils/email').sendEmailOtp("akshatmarwadi5@gmail.com", "999999");
+        res.json({ message: "Test trigger completed", result });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 const tempOtps = {};
 
 const { validateEmail, validatePhone } = require('./utils/validators');
