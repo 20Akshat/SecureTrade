@@ -20,11 +20,11 @@ async function sendEmailOtp(toEmail, otpCode) {
         return { success: true, simulated: true };
     }
 
-    // Configure transport with connection timeout limits & force IPv4 on DNS lookup
+    // Configure transport with Port 587 & secure: false (STARTTLS) to bypass cloud host Port 465 block
     const transporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
-        port: 465,
-        secure: true, // Use SSL/TLS
+        port: 587,
+        secure: false, // TLS
         auth: { user, pass },
         connectionTimeout: 10000, 
         greetingTimeout: 10000,
