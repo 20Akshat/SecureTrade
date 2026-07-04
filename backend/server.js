@@ -488,12 +488,24 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
             return failCheck(`Aadhaar verification failed: ${aadhaarVerify.reason || "Details do not match!"}`);
         }
 
-        // Move to verified uploads folder
+        // Move to verified uploads folder safely using copy + unlink fallback
         const panDest = path.join(__dirname, 'uploads/verified', `${userId}_pan.png`);
         const aadhaarDest = path.join(__dirname, 'uploads/verified', `${userId}_aadhaar.png`);
         fs.mkdirSync(path.dirname(panDest), { recursive: true });
-        fs.renameSync(panFile.path, panDest);
-        fs.renameSync(aadhaarFile.path, aadhaarDest);
+        
+        try {
+            fs.renameSync(panFile.path, panDest);
+        } catch (renameErr) {
+            fs.copyFileSync(panFile.path, panDest);
+            fs.unlinkSync(panFile.path);
+        }
+        
+        try {
+            fs.renameSync(aadhaarFile.path, aadhaarDest);
+        } catch (renameErr) {
+            fs.copyFileSync(aadhaarFile.path, aadhaarDest);
+            fs.unlinkSync(aadhaarFile.path);
+        }
 
         // Update in localDb
         localDb.updateUserDocuments(userId, email, "N/A", brokerClientId || "N/A", panNumber || "N/A", aadhaarNumber, panDest, aadhaarDest, true);
@@ -501,7 +513,7 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
         res.status(200).json({ message: "Documents verified successfully! Access granted.", verified: true });
     } catch (err) {
         console.error("User verify document error:", err.message);
-        res.status(500).json({ error: "Failed to verify documents." });
+        res.status(500).json({ error: `Failed to verify documents: ${err.message}` });
     }
 });
 
