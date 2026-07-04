@@ -19,13 +19,16 @@ async function sendEmailOtp(toEmail, otpCode) {
         return { success: true, simulated: true };
     }
 
-    // Configure transport with connection timeout limits to prevent API hangs
+    // Configure transport with connection timeout limits & force IPv4 (family: 4)
     const transporter = nodemailer.createTransport({
-        service: 'gmail',
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true, // Use SSL/TLS
         auth: { user, pass },
-        connectionTimeout: 7000, // 7 seconds timeout
-        greetingTimeout: 5000,
-        socketTimeout: 8000
+        connectionTimeout: 10000, 
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
+        family: 4 // STRICTLY FORCE IPV4 to bypass Render IPv6 routing issues
     });
 
     const mailOptions = {
@@ -49,9 +52,7 @@ async function sendEmailOtp(toEmail, otpCode) {
         return { success: true };
     } catch (err) {
         console.error("Nodemailer error:", err.message);
-        // If real email send fails due to network/creds, fallback gracefully in response logs 
-        // to prevent absolute user login locks, but log the error.
-        return { success: true, simulated: true, error: err.message };
+        return { success: false, simulated: false, error: err.message };
     }
 }
 
