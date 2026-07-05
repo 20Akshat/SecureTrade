@@ -3456,33 +3456,41 @@ const globalUpdateInterval = setInterval(async () => {
         
         const activeHistory = [...curState.history, price];
         const rsi = calculateRSI(activeHistory);
-        const signal = generateSignal(rsi, activeHistory, symbol);
-        const signalGainz = generateSignalGainz(rsi, activeHistory, symbol);
         
-        curState.lastRsi = rsi;
-        curState.lastSignal = signal;
-        curState.lastSignalGainz = signalGainz;
-
+        let signal = "WAIT";
+        let signalGainz = "WAIT";
         let signal5ema = "WAIT";
         let targetPct5ema = 20;
         let slPct5ema = 15;
-        
-        if (curState.ceAlertHigh && price > curState.ceAlertHigh) {
-            signal5ema = "BUY (5EMA Breakout)";
-            const rawSl = ((price - curState.ceAlertLow) / price) * 100;
-            slPct5ema = Math.max(1.5, Math.min(20, rawSl));
-            targetPct5ema = slPct5ema * 3;
+
+        if (open) {
+            signal = generateSignal(rsi, activeHistory, symbol);
+            signalGainz = generateSignalGainz(rsi, activeHistory, symbol);
+            
+            if (curState.ceAlertHigh && price > curState.ceAlertHigh) {
+                signal5ema = "BUY (5EMA Breakout)";
+                const rawSl = ((price - curState.ceAlertLow) / price) * 100;
+                slPct5ema = Math.max(1.5, Math.min(20, rawSl));
+                targetPct5ema = slPct5ema * 3;
+                curState.ceAlertHigh = null;
+                console.log(`🎯 [5EMA Buy Trigger] ${symbol} price ${price} broke high (SL: -${slPct5ema.toFixed(1)}%)`);
+            } else if (curState.peAlertLow && price < curState.peAlertLow) {
+                signal5ema = "SELL (5EMA Breakout)";
+                const rawSl = ((curState.peAlertHigh - price) / price) * 100;
+                slPct5ema = Math.max(1.5, Math.min(20, rawSl));
+                targetPct5ema = slPct5ema * 3;
+                curState.peAlertLow = null;
+                console.log(`🎯 [5EMA Sell Trigger] ${symbol} price ${price} broke low (SL: -${slPct5ema.toFixed(1)}%)`);
+            }
+        } else {
+            // Reset temporary alerts when market is closed
             curState.ceAlertHigh = null;
-            console.log(`🎯 [5EMA Buy Trigger] ${symbol} price ${price} broke high (SL: -${slPct5ema.toFixed(1)}%)`);
-        } else if (curState.peAlertLow && price < curState.peAlertLow) {
-            signal5ema = "SELL (5EMA Breakout)";
-            const rawSl = ((curState.peAlertHigh - price) / price) * 100;
-            slPct5ema = Math.max(1.5, Math.min(20, rawSl));
-            targetPct5ema = slPct5ema * 3;
             curState.peAlertLow = null;
-            console.log(`🎯 [5EMA Sell Trigger] ${symbol} price ${price} broke low (SL: -${slPct5ema.toFixed(1)}%)`);
         }
-        
+
+        curState.lastRsi = rsi;
+        curState.lastSignal = signal;
+        curState.lastSignalGainz = signalGainz;
         curState.lastSignal5ema = signal5ema;
         if (signal5ema !== "WAIT") {
             curState.lastTargetPct5ema = targetPct5ema;
