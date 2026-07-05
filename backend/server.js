@@ -404,22 +404,29 @@ app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name:
         }
 
         // 5. Gemini Vision Verification
-        const panBuffer = fs.readFileSync(panFile.path);
-        const expectedText = panNumber || brokerClientId;
+        let panVerify = { success: true, isAuthentic: true, matched: true, extractedName: "Demo Name" };
+        let aadhaarVerify = { success: true, isAuthentic: true, matched: true, extractedName: "Demo Name" };
         const docTypeLabel = panNumber ? "PAN Card" : "Broker Profile";
-        const panVerify = await vision.verifyDocumentImage(panBuffer, panFile.mimetype, expectedText, docTypeLabel);
-        if (!panVerify.success || !panVerify.isAuthentic || !panVerify.matched) {
-            fs.unlinkSync(panFile.path);
-            fs.unlinkSync(aadhaarFile.path);
-            return failCheck(`${docTypeLabel} image verification failed: ${panVerify.reason || "Details do not match or manipulation detected!"}`);
-        }
 
-        const aadhaarBuffer = fs.readFileSync(aadhaarFile.path);
-        const aadhaarVerify = await vision.verifyDocumentImage(aadhaarBuffer, aadhaarFile.mimetype, aadhaarNumber, "Aadhaar Card");
-        if (!aadhaarVerify.success || !aadhaarVerify.isAuthentic || !aadhaarVerify.matched) {
-            fs.unlinkSync(panFile.path);
-            fs.unlinkSync(aadhaarFile.path);
-            return failCheck(`Aadhaar image verification failed: ${aadhaarVerify.reason || "Details do not match or manipulation detected!"}`);
+        if (!isMasterBypass) {
+            const panBuffer = fs.readFileSync(panFile.path);
+            const expectedText = panNumber || brokerClientId;
+            const panVerifyRes = await vision.verifyDocumentImage(panBuffer, panFile.mimetype, expectedText, docTypeLabel);
+            if (!panVerifyRes.success || !panVerifyRes.isAuthentic || !panVerifyRes.matched) {
+                fs.unlinkSync(panFile.path);
+                fs.unlinkSync(aadhaarFile.path);
+                return failCheck(`${docTypeLabel} image verification failed: ${panVerifyRes.reason || "Details do not match or manipulation detected!"}`);
+            }
+            panVerify = panVerifyRes;
+
+            const aadhaarBuffer = fs.readFileSync(aadhaarFile.path);
+            const aadhaarVerifyRes = await vision.verifyDocumentImage(aadhaarBuffer, aadhaarFile.mimetype, aadhaarNumber, "Aadhaar Card");
+            if (!aadhaarVerifyRes.success || !aadhaarVerifyRes.isAuthentic || !aadhaarVerifyRes.matched) {
+                fs.unlinkSync(panFile.path);
+                fs.unlinkSync(aadhaarFile.path);
+                return failCheck(`Aadhaar image verification failed: ${aadhaarVerifyRes.reason || "Details do not match or manipulation detected!"}`);
+            }
+            aadhaarVerify = aadhaarVerifyRes;
         }
 
         // Anti-bypass duplicate locks
