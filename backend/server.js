@@ -488,6 +488,23 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
             return failCheck(`Aadhaar verification failed: ${aadhaarVerify.reason || "Details do not match!"}`);
         }
 
+        // 5. Cross-document Name Verification to prevent mixed identity fraud (e.g. own PAN + father's Aadhaar)
+        const cleanName = (name) => {
+            if (!name) return [];
+            return name.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(Boolean);
+        };
+        const panWords = cleanName(panVerify.extractedName);
+        const aadhaarWords = cleanName(aadhaarVerify.extractedName);
+        const commonWords = panWords.filter(w => aadhaarWords.includes(w));
+        const minRequired = Math.min(panWords.length, aadhaarWords.length, 2);
+
+        const isNameMatch = commonWords.length >= minRequired && commonWords.length > 0;
+        if (!isNameMatch && process.env.GEMINI_API_KEY) {
+            fs.unlinkSync(panFile.path);
+            fs.unlinkSync(aadhaarFile.path);
+            return failCheck(`Identity Mismatch! The name on Aadhaar Card ("${aadhaarVerify.extractedName || "Unknown"}") does not match the owner name on ${docTypeLabel} ("${panVerify.extractedName || "Unknown"}").`);
+        }
+
         // Move to verified uploads folder safely using copy + unlink fallback
         const panDest = path.join(__dirname, 'uploads/verified', `${userId}_pan.png`);
         const aadhaarDest = path.join(__dirname, 'uploads/verified', `${userId}_aadhaar.png`);
