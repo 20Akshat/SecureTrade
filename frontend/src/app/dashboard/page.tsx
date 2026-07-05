@@ -390,6 +390,13 @@ export default function DashboardPage() {
               </>
             )}
           </form>
+          
+          <div className="mt-6 p-4 bg-slate-950 border border-slate-800 rounded-2xl text-[10px] font-mono text-slate-400 space-y-1 text-center">
+            <div className="text-slate-500 font-bold uppercase tracking-wider mb-1">🔐 Terminal Diagnostic Info</div>
+            <div>Session Email: <span className="text-white">{userEmail || "Not detected"}</span></div>
+            <div>Admin Privileges: <span className={isAdmin ? "text-green-400 font-bold" : "text-red-400"}>{isAdmin ? "TRUE" : "FALSE"}</span></div>
+            <div>Verified State: <span className={documentsVerified ? "text-green-400 font-bold" : "text-red-400"}>{documentsVerified ? "TRUE" : "FALSE"}</span></div>
+          </div>
         </div>
       </div>
     );
