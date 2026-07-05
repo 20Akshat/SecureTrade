@@ -674,43 +674,25 @@ app.post('/api/auth/verify-otp-reset', async (req, res) => {
 app.post('/api/send-sms', authMiddleware, async (req, res) => {
     try {
         const { message } = req.body;
-        const userId = req.user.userId;
+        const email = req.user.email;
 
         if (!message) return res.status(400).json({ error: "Message content is required!" });
 
-        // Lookup phone number from localDb
-        const user = localDb.getUserConfig(userId);
-        const phone = user ? user.phone : null;
-        if (!phone) {
-            return res.status(400).json({ error: "Mobile number not registered for SMS alerts!" });
-        }
-
-        console.log(`📱 [SMS TRIGGERED to ${phone}]: ${message}`);
+        console.log(`✉️ [EMAIL ALERTS REDIRECT from SMS to ${email}]: ${message}`);
         
-        // Write to local scratch log
-        const logPath = path.join(__dirname, '../scratch/sms_alerts.log');
-        fs.appendFileSync(logPath, `[${new Date().toISOString()}] To ${phone}: ${message}\n`, 'utf8');
+        // Write to local scratch log for persistence checks
+        const logPath = path.join(__dirname, '../scratch/email_alerts.log');
+        const dir = path.dirname(logPath);
+        if (!require('fs').existsSync(dir)) require('fs').mkdirSync(dir, { recursive: true });
+        require('fs').appendFileSync(logPath, `[${new Date().toISOString()}] To ${email}: ${message}\n`, 'utf8');
 
-        // Twilio SMS Integration
-        if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER) {
-            try {
-                const twilio = require('twilio');
-                const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-                await client.messages.create({
-                    body: message,
-                    from: process.env.TWILIO_PHONE_NUMBER,
-                    to: phone.startsWith('+') ? phone : `+91${phone}`
-                });
-                console.log("Twilio SMS sent successfully!");
-            } catch (err) {
-                console.error("Twilio SMS failed:", err.message);
-            }
-        }
+        // Dispatch Email using Vercel SMTP Bridge
+        const emailResult = await require('./utils/email').sendEmailNotification(email, message);
 
-        res.json({ success: true, message: "SMS Alert dispatched." });
+        res.json({ success: emailResult.success, message: "Alert email dispatched via SMTP Bridge." });
     } catch (err) {
-        console.error("Send SMS endpoint error:", err.message);
-        res.status(500).json({ error: "Failed to dispatch SMS." });
+        console.error("Send Email alert endpoint error:", err.message);
+        res.status(500).json({ error: "Failed to dispatch email alert." });
     }
 });
 

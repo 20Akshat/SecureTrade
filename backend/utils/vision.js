@@ -15,10 +15,10 @@ async function verifyDocumentImage(imageBuffer, mimeType, expectedId, documentTy
     const prompt = `Analyze this uploaded image which is supposed to be a ${documentType}.
 Expected ${documentType} Number / ID to find: "${expectedId}".
 
-You must perform four checks:
+You must perform four strict checks:
 1. Document Identification: Check if the uploaded image is actually a valid document of type ${documentType} (e.g., Aadhaar Card, PAN Card, or Broker/Setting Profile page). If the image is a random photograph, selfie, animal, object, landscape, text of a book, or any other unrelated file, you must reject it.
-2. ID Verification: Locate and extract the ${documentType} ID/Number from the image. Does it match the expected ID "${expectedId}"? (Case-insensitive check).
-3. Name Extraction: Extract the cardholder's / account owner's Full Name from the document image text.
+2. Strict ID Verification: Locate the ${documentType} ID/Number printed in the image. It must match the expected ID "${expectedId}" exactly (character-for-character check, case-insensitive, ignoring only spaces or hyphens). If the document image contains a different ID/Number (even by a single digit or letter, e.g. "ABC123" vs expected "XYZ999"), you MUST return "matched": false. Do not be lenient.
+3. Full Name Extraction: Extract the cardholder's / account owner's Full Name from the document image text. The owner name must be present on the document. If no name can be read, or if the name is cropped/missing, set "matched": false and explain in the reason.
 4. Authenticity Check: Look closely for digital alterations. Are there misaligned letters/digits, inconsistent fonts within the ID string, duplicate text overlays, copy-paste artifact borders, or whiteout spots indicating Photoshop/editing? Do not fail blurry or normal camera photos, only flag clear digital modifications of the document contents.
 
 Respond in strict JSON format:
