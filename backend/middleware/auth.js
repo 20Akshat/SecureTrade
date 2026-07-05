@@ -1,8 +1,9 @@
 const jwt = require('jsonwebtoken');
 const localDb = require('../localDb');
+const supabase = require('../db');
 
 // Yeh hamara Security Guard hai
-const authMiddleware = (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
     // 1. Header se token nikalna (Aisa dikhta hai: "Bearer eyJhb...")
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -38,7 +39,16 @@ const authMiddleware = (req, res, next) => {
 
         if (!isExempted && !isAdmin) {
             const userConfig = localDb.getUserConfig(decoded.userId);
-            const isVerified = userConfig ? !!userConfig.documents_verified : false;
+            let isVerified = userConfig ? !!userConfig.documents_verified : false;
+            
+            // Lazy-sync verification status from Supabase Cloud if local database got wiped on Render restart
+            if (!isVerified) {
+                const { data: kyc } = await supabase.from('portfolio').select('id').eq('user_id', decoded.userId).eq('symbol', 'KYC_VERIFIED').limit(1);
+                if (kyc && kyc.length > 0) {
+                    isVerified = true;
+                    localDb.updateUserDocuments(decoded.userId, decoded.email, "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", true);
+                }
+            }
             
             if (!isVerified) {
                 return res.status(403).json({ 

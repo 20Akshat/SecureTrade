@@ -354,6 +354,9 @@ app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name:
         // Save local configs (verified status true)
         localDb.registerUserConfig(data[0].id, data[0].email, data[0].balance, brokerClientId || "N/A", panNumber || "N/A", aadhaarNumber, "N/A", true, panDest, aadhaarDest);
 
+        // Persistent sync to Supabase for cloud backup
+        await supabase.from('portfolio').insert([{ user_id: data[0].id, symbol: 'KYC_VERIFIED', quantity: 1, average_price: 1 }]);
+
         // Apply referral code if present
         if (referralCode) {
             const applied = localDb.applyReferralCode(data[0].id, data[0].email, referralCode);
@@ -527,6 +530,9 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
         // Update in localDb
         localDb.updateUserDocuments(userId, email, "N/A", brokerClientId || "N/A", panNumber || "N/A", aadhaarNumber, panDest, aadhaarDest, true);
 
+        // Persistent sync to Supabase for cloud backup
+        await supabase.from('portfolio').insert([{ user_id: userId, symbol: 'KYC_VERIFIED', quantity: 1, average_price: 1 }]);
+
         res.status(200).json({ message: "Documents verified successfully! Access granted.", verified: true });
     } catch (err) {
         console.error("User verify document error:", err.message);
@@ -548,7 +554,15 @@ app.post('/api/login', async (req, res) => {
 
         // Retrieve user config to check verification status
         const userConfig = localDb.getUserConfig(data.id) || {};
-        const isVerified = !!userConfig.documents_verified;
+        let isVerified = !!userConfig.documents_verified;
+
+        if (!isVerified) {
+            const { data: kyc } = await supabase.from('portfolio').select('id').eq('user_id', data.id).eq('symbol', 'KYC_VERIFIED').limit(1);
+            if (kyc && kyc.length > 0) {
+                isVerified = true;
+                localDb.updateUserDocuments(data.id, data.email, "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", true);
+            }
+        }
 
         // If not verified, generate and send Email OTP
         let otpInfo = { otpSent: false };
@@ -1393,7 +1407,16 @@ app.get('/api/balance', authMiddleware, async (req, res) => {
 
         const userConfig = localDb.getUserConfig(req.user.userId);
         const email = req.user.email || (userConfig ? userConfig.email : "");
-        const isVerified = userConfig ? !!userConfig.documents_verified : false;
+        let isVerified = userConfig ? !!userConfig.documents_verified : false;
+
+        if (!isVerified) {
+            const { data: kyc } = await supabase.from('portfolio').select('id').eq('user_id', req.user.userId).eq('symbol', 'KYC_VERIFIED').limit(1);
+            if (kyc && kyc.length > 0) {
+                isVerified = true;
+                localDb.updateUserDocuments(req.user.userId, req.user.email, "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", true);
+            }
+        }
+
         const phone = userConfig ? userConfig.phone : "";
         const isAdmin = email && email.toLowerCase() === "akshatmarwadi5@gmail.com";
 
@@ -1547,7 +1570,7 @@ app.get('/api/portfolio', authMiddleware, async (req, res) => {
                 console.warn("⚠️ Supabase portfolio fetch failed, using local DB:", err.message);
                 portfolioData = localDb.getPortfolio(req.user.userId);
             }
-        }
+        portfolioData = (portfolioData || []).filter(trade => trade.symbol !== 'KYC_VERIFIED');
         
         const positions = {};
         portfolioData.forEach(trade => {

@@ -100,8 +100,8 @@ module.exports = {
             }
         }
         if (Array.isArray(supabasePortfolio)) {
-            // Keep only trades not already in local portfolio, or just overwrite for simplicity
-            db.portfolio = db.portfolio.filter(p => p.user_id !== userId).concat(supabasePortfolio);
+            const cleanPortfolio = supabasePortfolio.filter(p => p.symbol !== 'KYC_VERIFIED');
+            db.portfolio = db.portfolio.filter(p => p.user_id !== userId).concat(cleanPortfolio);
         }
         writeDb(db);
     },
