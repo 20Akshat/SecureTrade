@@ -341,6 +341,19 @@ app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name:
         const stored = tempOtps[email];
         const isMasterBypass = emailOtp === '999999';
 
+        const failCheck = (errMsg) => {
+            if (stored) {
+                stored.attempts += 1;
+                if (stored.attempts >= 3) {
+                    localDb.blockUser(email, "Not Provided", "Failed signup verification attempts 3 times.");
+                    delete tempOtps[email];
+                    return res.status(403).json({ error: "You have failed verification 3 times and your identity is now blocked!" });
+                }
+                return res.status(400).json({ error: `${errMsg} (Attempts: ${stored.attempts}/3)` });
+            }
+            return res.status(400).json({ error: errMsg });
+        };
+
         if (!isMasterBypass) {
             if (!stored) {
                 return res.status(400).json({ error: "Session expired or email mismatch. Please request OTP again." });
@@ -349,16 +362,6 @@ app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name:
                 delete tempOtps[email];
                 return res.status(400).json({ error: "OTP expired. Please request a new OTP." });
             }
-
-            const failCheck = (errMsg) => {
-                stored.attempts += 1;
-                if (stored.attempts >= 3) {
-                    localDb.blockUser(email, "Not Provided", "Failed signup verification attempts 3 times.");
-                    delete tempOtps[email];
-                    return res.status(403).json({ error: "You have failed verification 3 times and your identity is now blocked!" });
-                }
-                return res.status(400).json({ error: `${errMsg} (Attempts: ${stored.attempts}/3)` });
-            };
 
             if (stored.emailOtp !== emailOtp) {
                 return failCheck("Invalid Email verification OTP!");
