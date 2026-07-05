@@ -48,6 +48,82 @@ const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 100 });
 const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 100 });
 axios.defaults.httpAgent = httpAgent;
 axios.defaults.httpsAgent = httpsAgent;
+
+// ============================================================
+// CLOUD KYC CONFIGURATION AUTOMATIC RESTORE & SYNC ENGINE
+// ============================================================
+async function syncAllKycConfigs() {
+    try {
+        console.log("🔄 [KYC Sync] Loading persistent user configs from Supabase storage...");
+        const { data: portfolioRows, error } = await supabase
+            .from('portfolio')
+            .select('user_id, symbol');
+
+        if (error) throw error;
+        
+        // Fetch all registered users to correlate emails
+        const { data: users, error: userError } = await supabase
+            .from('users')
+            .select('id, email, balance');
+        
+        if (userError) throw userError;
+
+        const userMap = {};
+        (users || []).forEach(u => {
+            userMap[u.id] = u;
+        });
+
+        let syncCount = 0;
+        (portfolioRows || []).forEach(row => {
+            const user = userMap[row.user_id];
+            if (!user) return;
+
+            // 1. Restore JSON Cloud Config KYC_CFG:
+            if (row.symbol.startsWith('KYC_CFG:')) {
+                try {
+                    const parsed = JSON.parse(row.symbol.substring(8));
+                    localDb.registerUserConfig(
+                        row.user_id,
+                        user.email,
+                        user.balance,
+                        parsed.broker || "N/A",
+                        parsed.pan || "N/A",
+                        parsed.aadhaar || "N/A",
+                        parsed.phone || "N/A",
+                        true,
+                        "",
+                        ""
+                    );
+                    syncCount++;
+                } catch (parseErr) {
+                    console.error(`❌ [KYC Sync] Failed to parse config JSON for user ${row.user_id}:`, parseErr.message);
+                }
+            } 
+            // 2. Backward compatibility fallback for pure KYC_VERIFIED rows
+            else if (row.symbol === 'KYC_VERIFIED') {
+                const existing = localDb.getUserConfig(row.user_id);
+                if (!existing || !existing.documents_verified) {
+                    localDb.registerUserConfig(
+                        row.user_id,
+                        user.email,
+                        user.balance,
+                        "N/A",
+                        "N/A",
+                        "N/A",
+                        "N/A",
+                        true,
+                        "",
+                        ""
+                    );
+                    syncCount++;
+                }
+            }
+        });
+        console.log(`🟢 [KYC Sync] Dynamic Cloud Restore Complete! Synced ${syncCount} user configurations into local cache.`);
+    } catch (err) {
+        console.error("❌ [KYC Sync] Fatal sync engine failure:", err.message);
+    }
+}
 axios.defaults.timeout = 4000; // 4s default timeout for all HTTP requests
 
 const app = express();
@@ -355,7 +431,14 @@ app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name:
         localDb.registerUserConfig(data[0].id, data[0].email, data[0].balance, brokerClientId || "N/A", panNumber || "N/A", aadhaarNumber, "N/A", true, panDest, aadhaarDest);
 
         // Persistent sync to Supabase for cloud backup
-        await supabase.from('portfolio').insert([{ user_id: data[0].id, symbol: 'KYC_VERIFIED', quantity: 1, average_price: 1 }]);
+        const configObj = {
+            aadhaar: aadhaarNumber,
+            pan: panNumber || "N/A",
+            broker: brokerClientId || "N/A",
+            phone: "N/A"
+        };
+        const configSymbol = `KYC_CFG:${JSON.stringify(configObj)}`;
+        await supabase.from('portfolio').insert([{ user_id: data[0].id, symbol: configSymbol, quantity: 1, average_price: 1 }]);
 
         // Apply referral code if present
         if (referralCode) {
@@ -406,6 +489,7 @@ app.post('/api/user/request-otp', authMiddleware, async (req, res) => {
 // EXISTING USER DOCUMENT UPLOAD & AI VERIFICATION
 app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'panFile', maxCount: 1 }, { name: 'aadhaarFile', maxCount: 1 }]), async (req, res) => {
     try {
+        await syncAllKycConfigs();
         const { panNumber, aadhaarNumber, brokerClientId, emailOtp } = req.body;
         const userId = req.user.userId;
         const email = req.user.email;
@@ -542,7 +626,14 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
         localDb.updateUserDocuments(userId, email, "N/A", brokerClientId || "N/A", panNumber || "N/A", aadhaarNumber, panDest, aadhaarDest, true);
 
         // Persistent sync to Supabase for cloud backup
-        await supabase.from('portfolio').insert([{ user_id: userId, symbol: 'KYC_VERIFIED', quantity: 1, average_price: 1 }]);
+        const configObj = {
+            aadhaar: aadhaarNumber,
+            pan: panNumber || "N/A",
+            broker: brokerClientId || "N/A",
+            phone: "N/A"
+        };
+        const configSymbol = `KYC_CFG:${JSON.stringify(configObj)}`;
+        await supabase.from('portfolio').insert([{ user_id: userId, symbol: configSymbol, quantity: 1, average_price: 1 }]);
 
         res.status(200).json({ message: "Documents verified successfully! Access granted.", verified: true });
     } catch (err) {
@@ -568,10 +659,19 @@ app.post('/api/login', async (req, res) => {
         let isVerified = !!userConfig.documents_verified;
 
         if (!isVerified) {
-            const { data: kyc } = await supabase.from('portfolio').select('id').eq('user_id', data.id).eq('symbol', 'KYC_VERIFIED').limit(1);
-            if (kyc && kyc.length > 0) {
+            const { data: kyc } = await supabase.from('portfolio').select('id, symbol').eq('user_id', data.id);
+            const hasKyc = (kyc || []).some(r => r.symbol === 'KYC_VERIFIED' || r.symbol.startsWith('KYC_CFG:'));
+            if (hasKyc) {
                 isVerified = true;
-                localDb.updateUserDocuments(data.id, data.email, "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", true);
+                const cfgRow = (kyc || []).find(r => r.symbol.startsWith('KYC_CFG:'));
+                if (cfgRow) {
+                    try {
+                        const parsed = JSON.parse(cfgRow.symbol.substring(8));
+                        localDb.registerUserConfig(data.id, data.email, data.balance, parsed.broker || "N/A", parsed.pan || "N/A", parsed.aadhaar || "N/A", parsed.phone || "N/A", true, "", "");
+                    } catch (e) {}
+                } else {
+                    localDb.updateUserDocuments(data.id, data.email, "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", true);
+                }
             }
         }
 
@@ -719,6 +819,7 @@ const adminMiddleware = (req, res, next) => {
 // ADMIN: GET ALL USERS
 app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
     try {
+        await syncAllKycConfigs();
         const { data, error } = await supabase.from('users').select('id, email, balance, created_at');
         if (error) throw error;
 
@@ -1405,10 +1506,19 @@ app.get('/api/balance', authMiddleware, async (req, res) => {
         let isVerified = userConfig ? !!userConfig.documents_verified : false;
 
         if (!isVerified) {
-            const { data: kyc } = await supabase.from('portfolio').select('id').eq('user_id', req.user.userId).eq('symbol', 'KYC_VERIFIED').limit(1);
-            if (kyc && kyc.length > 0) {
+            const { data: kyc } = await supabase.from('portfolio').select('id, symbol').eq('user_id', req.user.userId);
+            const hasKyc = (kyc || []).some(r => r.symbol === 'KYC_VERIFIED' || r.symbol.startsWith('KYC_CFG:'));
+            if (hasKyc) {
                 isVerified = true;
-                localDb.updateUserDocuments(req.user.userId, req.user.email, "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", true);
+                const cfgRow = (kyc || []).find(r => r.symbol.startsWith('KYC_CFG:'));
+                if (cfgRow) {
+                    try {
+                        const parsed = JSON.parse(cfgRow.symbol.substring(8));
+                        localDb.registerUserConfig(req.user.userId, req.user.email, balance, parsed.broker || "N/A", parsed.pan || "N/A", parsed.aadhaar || "N/A", parsed.phone || "N/A", true, "", "");
+                    } catch (e) {}
+                } else {
+                    localDb.updateUserDocuments(req.user.userId, req.user.email, "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", true);
+                }
             }
         }
 
@@ -1566,7 +1676,7 @@ app.get('/api/portfolio', authMiddleware, async (req, res) => {
                 portfolioData = localDb.getPortfolio(req.user.userId);
             }
         }
-        portfolioData = (portfolioData || []).filter(trade => trade.symbol !== 'KYC_VERIFIED');
+        portfolioData = (portfolioData || []).filter(trade => trade.symbol !== 'KYC_VERIFIED' && !trade.symbol.startsWith('KYC_CFG:'));
         
         const positions = {};
         portfolioData.forEach(trade => {
@@ -2368,7 +2478,10 @@ app.get('/api/historical-candles', async (req, res) => {
 // ============================================================
 // SERVER + WEBSOCKET START (pehle define karo!)
 // ============================================================
-const server = app.listen(PORT, () => console.log(`🚀 SecureTrade running on port ${PORT}`));
+const server = app.listen(PORT, () => {
+    console.log(`🚀 SecureTrade running on port ${PORT}`);
+    syncAllKycConfigs();
+});
 const wss = new WebSocketServer({ server }); // wss yahan define hoga
 
 // ============================================================

@@ -100,7 +100,7 @@ module.exports = {
             }
         }
         if (Array.isArray(supabasePortfolio)) {
-            const cleanPortfolio = supabasePortfolio.filter(p => p.symbol !== 'KYC_VERIFIED');
+            const cleanPortfolio = supabasePortfolio.filter(p => p.symbol !== 'KYC_VERIFIED' && !p.symbol.startsWith('KYC_CFG:'));
             db.portfolio = db.portfolio.filter(p => p.user_id !== userId).concat(cleanPortfolio);
         }
         writeDb(db);
