@@ -1503,22 +1503,28 @@ app.get('/api/balance', authMiddleware, async (req, res) => {
 
         const userConfig = localDb.getUserConfig(req.user.userId);
         const email = req.user.email || (userConfig ? userConfig.email : "");
-        let isVerified = userConfig ? !!userConfig.documents_verified : false;
 
-        if (!isVerified) {
-            const { data: kyc } = await supabase.from('portfolio').select('id, symbol').eq('user_id', req.user.userId);
-            const hasKyc = (kyc || []).some(r => r.symbol === 'KYC_VERIFIED' || r.symbol.startsWith('KYC_CFG:'));
-            if (hasKyc) {
-                isVerified = true;
-                const cfgRow = (kyc || []).find(r => r.symbol.startsWith('KYC_CFG:'));
-                if (cfgRow) {
-                    try {
-                        const parsed = JSON.parse(cfgRow.symbol.substring(8));
-                        localDb.registerUserConfig(req.user.userId, req.user.email, balance, parsed.broker || "N/A", parsed.pan || "N/A", parsed.aadhaar || "N/A", parsed.phone || "N/A", true, "", "");
-                    } catch (e) {}
-                } else {
-                    localDb.updateUserDocuments(req.user.userId, req.user.email, "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", true);
-                }
+        // ALWAYS check Supabase for fresh KYC status (prevents stale cache bypass)
+        const { data: kyc } = await supabase.from('portfolio').select('id, symbol').eq('user_id', req.user.userId);
+        const kycRows = kyc || [];
+        const hasKyc = kycRows.some(r => r.symbol === 'KYC_VERIFIED' || r.symbol.startsWith('KYC_CFG:'));
+        let isVerified = false;
+
+        if (hasKyc) {
+            isVerified = true;
+            const cfgRow = kycRows.find(r => r.symbol.startsWith('KYC_CFG:'));
+            if (cfgRow) {
+                try {
+                    const parsed = JSON.parse(cfgRow.symbol.substring(8));
+                    localDb.registerUserConfig(req.user.userId, req.user.email, balance, parsed.broker || "N/A", parsed.pan || "N/A", parsed.aadhaar || "N/A", parsed.phone || "N/A", true, "", "");
+                } catch (e) {}
+            } else {
+                localDb.updateUserDocuments(req.user.userId, req.user.email, "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", true);
+            }
+        } else {
+            // Supabase has no KYC row - clear local cache too so it stays in sync
+            if (userConfig && userConfig.documents_verified) {
+                localDb.updateUserDocuments(req.user.userId, req.user.email, "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", false);
             }
         }
 
