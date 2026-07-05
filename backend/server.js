@@ -825,7 +825,7 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
 
         const users = data.map(u => {
             const config = localDb.getUserConfig(u.id) || {};
-            const clientVal = config.verification_id || config.angel_client_code || "Not Set";
+            const clientVal = config.broker_client_id || config.pan_number || config.verification_id || config.angel_client_code || "Not Set";
             const typeLabel = config.verification_type ? ` [${config.verification_type.replace('_', ' ')}]` : '';
             return {
                 id: u.id,
