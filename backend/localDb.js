@@ -115,6 +115,18 @@ module.exports = {
             (u.aadhaar_number && u.aadhaar_number.toUpperCase() === id.toUpperCase())
         );
     },
+    isDocumentUsedByOtherUser: (userId, id) => {
+        const db = readDb();
+        return Object.values(db.users).some(u => 
+            u.id !== userId && (
+                (u.verification_id && u.verification_id.toUpperCase() === id.toUpperCase()) ||
+                (u.broker_client_id && u.broker_client_id.toUpperCase() === id.toUpperCase()) ||
+                (u.government_id && u.government_id.toUpperCase() === id.toUpperCase()) ||
+                (u.pan_number && u.pan_number.toUpperCase() === id.toUpperCase()) ||
+                (u.aadhaar_number && u.aadhaar_number.toUpperCase() === id.toUpperCase())
+            )
+        );
+    },
     checkPhoneExists: (phone) => {
         const db = readDb();
         return Object.values(db.users).some(u => u.phone === phone);

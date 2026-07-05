@@ -465,6 +465,17 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
             }
         }
 
+        // 3.5 Check duplicates to prevent multi-account trial abuse
+        if (localDb.isDocumentUsedByOtherUser(userId, aadhaarNumber)) {
+            return failCheck("This Aadhaar Card Number is already registered/verified by another user! Reusing documents is not allowed.");
+        }
+        if (panNumber && localDb.isDocumentUsedByOtherUser(userId, panNumber)) {
+            return failCheck("This PAN Card Number is already registered/verified by another user! Reusing documents is not allowed.");
+        }
+        if (brokerClientId && localDb.isDocumentUsedByOtherUser(userId, brokerClientId)) {
+            return failCheck("This Broker Client ID is already registered/verified by another user! Reusing documents is not allowed.");
+        }
+
         // 3. Verify files present
         const panFile = req.files?.['panFile']?.[0];
         const aadhaarFile = req.files?.['aadhaarFile']?.[0];
