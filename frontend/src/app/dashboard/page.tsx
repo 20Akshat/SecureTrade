@@ -67,7 +67,7 @@ export default function DashboardPage() {
   };
 
   const userEmail = getUserEmail(token);
-  const isAdmin = userEmail === "akshatmarwadi5@gmail.com";
+  const isAdmin = userEmail && userEmail.toLowerCase() === "akshatmarwadi5@gmail.com";
 
   // Redirect to home page if user is not logged in
   useEffect(() => {
