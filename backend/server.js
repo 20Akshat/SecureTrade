@@ -308,8 +308,10 @@ app.post('/api/signup/request-otp', async (req, res) => {
 // SIGNUP
 app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name: 'aadhaarFile', maxCount: 1 }]), async (req, res) => {
     try {
-        const { email, password, phone, brokerClientId, panNumber, aadhaarNumber, emailOtp, referralCode } = req.body;
-        if (!email || !password || !phone || !aadhaarNumber || !emailOtp) {
+        let { email, password, phone, brokerClientId, panNumber, aadhaarNumber, emailOtp, referralCode } = req.body;
+        phone = phone || "N/A";
+
+        if (!email || !password || !aadhaarNumber || !emailOtp) {
             return res.status(400).json({ error: "All profile and verification OTP fields are required!" });
         }
         if (!panNumber && !brokerClientId) {
@@ -322,10 +324,12 @@ app.post('/api/signup', upload.fields([{ name: 'panFile', maxCount: 1 }, { name:
             return res.status(400).json({ error: emailCheck.error });
         }
 
-        // Validate Indian phone number
-        const phoneCheck = validatePhone(phone);
-        if (!phoneCheck.valid) {
-            return res.status(400).json({ error: phoneCheck.error });
+        // Validate Indian phone number (only if provided and not N/A)
+        if (phone && phone !== "N/A") {
+            const phoneCheck = validatePhone(phone);
+            if (!phoneCheck.valid) {
+                return res.status(400).json({ error: phoneCheck.error });
+            }
         }
 
         // Check if blocklisted
