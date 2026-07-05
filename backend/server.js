@@ -879,7 +879,8 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
                 balance: u.balance,
                 createdAt: u.created_at,
                 phone: config.phone || "Not Set",
-                angelClientCode: `${clientVal}${typeLabel}`
+                angelClientCode: `${clientVal}${typeLabel}`,
+                is_free_service: !!config.is_free_service
             };
         });
 
@@ -887,6 +888,18 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
     } catch (err) {
         console.error("Admin fetch users error:", err.message);
         res.status(500).json({ error: "Failed to fetch users." });
+    }
+});
+
+// ADMIN: TOGGLE FREE STATUS
+app.post('/api/admin/users/:userId/toggle-free', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const isFree = localDb.toggleFreeService(userId);
+        res.json({ success: true, is_free_service: isFree });
+    } catch (err) {
+        console.error("Admin toggle free error:", err.message);
+        res.status(500).json({ error: "Failed to toggle free status." });
     }
 });
 

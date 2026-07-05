@@ -205,6 +205,14 @@ module.exports = {
         const db = readDb();
         return db.users[userId];
     },
+    toggleFreeService: (userId) => {
+        const db = readDb();
+        const u = db.users[userId];
+        if (!u) return false;
+        u.is_free_service = !u.is_free_service;
+        writeDb(db);
+        return u.is_free_service;
+    },
     deleteUserConfig: (userId) => {
         const db = readDb();
         if (db.users[userId]) {
@@ -406,6 +414,7 @@ module.exports = {
         const u = db.users[userId];
         if (!u) return false;
         if (u.email === "akshatmarwadi5@gmail.com") return false;
+        if (u.is_free_service) return false; // Exempt from invoice locks
         const createdTime = new Date(u.created_at || Date.now()).getTime();
         const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
         if (Date.now() - createdTime < threeDaysMs) return false;
