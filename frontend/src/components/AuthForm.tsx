@@ -89,8 +89,9 @@ export default function AuthForm({ onLogin }: { onLogin: (token: string, balance
 
       if (isLogin) {
         // Handle login response
-        if (data.documents_verified) {
-          // User already verified - go straight to dashboard
+        const isAdmin = email && email.toLowerCase() === "akshatmarwadi5@gmail.com";
+        if (data.documents_verified || isAdmin) {
+          // User already verified or Admin - go straight to dashboard
           onLogin(data.token, data.balance);
         } else {
           // User not verified - store token and enter verification mode
