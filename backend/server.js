@@ -1375,7 +1375,7 @@ app.get('/api/balance', authMiddleware, async (req, res) => {
         }
 
         const userConfig = localDb.getUserConfig(req.user.userId);
-        const email = userConfig ? userConfig.email : "";
+        const email = req.user.email || (userConfig ? userConfig.email : "");
         const isVerified = userConfig ? !!userConfig.documents_verified : false;
         const phone = userConfig ? userConfig.phone : "";
         const isAdmin = email && email.toLowerCase() === "akshatmarwadi5@gmail.com";
