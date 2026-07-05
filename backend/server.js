@@ -603,15 +603,28 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
             return failCheck(`Aadhaar verification failed: ${aadhaarVerify.reason || "Details do not match!"}`);
         }
 
-        // 5. Cross-document Name Verification to prevent mixed identity fraud (e.g. own PAN + father's Aadhaar)
+        // 5. Cross-document Name Verification to prevent mixed identity fraud
         const cleanName = (name) => {
             if (!name) return [];
             return name.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(Boolean);
         };
+        // Fuzzy match: allow OCR errors with max 2 character difference (e.g. "Priyesh" vs "Priyash")
+        const fuzzyMatch = (a, b) => {
+            if (a === b) return true;
+            if (Math.abs(a.length - b.length) > 2) return false;
+            let diff = 0;
+            const maxLen = Math.max(a.length, b.length);
+            for (let i = 0; i < maxLen; i++) {
+                if (a[i] !== b[i]) diff++;
+                if (diff > 2) return false;
+            }
+            return true;
+        };
         const panWords = cleanName(panVerify.extractedName);
         const aadhaarWords = cleanName(aadhaarVerify.extractedName);
-        const commonWords = panWords.filter(w => aadhaarWords.includes(w));
-        const minRequired = Math.min(panWords.length, aadhaarWords.length, 2);
+        // Check exact OR fuzzy matches between name words
+        const commonWords = panWords.filter(pw => aadhaarWords.some(aw => fuzzyMatch(pw, aw)));
+        const minRequired = 1; // Surname match is sufficient - OCR can misread first names
 
         const isNameMatch = commonWords.length >= minRequired && commonWords.length > 0;
         if (!isNameMatch && process.env.GEMINI_API_KEY) {
