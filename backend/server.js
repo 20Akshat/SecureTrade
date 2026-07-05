@@ -73,7 +73,10 @@ async function syncAllKycConfigs() {
             userMap[u.id] = u;
         });
 
+        // Build set of user IDs that have valid KYC in Supabase
+        const verifiedUserIds = new Set();
         let syncCount = 0;
+
         (portfolioRows || []).forEach(row => {
             const user = userMap[row.user_id];
             if (!user) return;
@@ -94,6 +97,7 @@ async function syncAllKycConfigs() {
                         "",
                         ""
                     );
+                    verifiedUserIds.add(row.user_id);
                     syncCount++;
                 } catch (parseErr) {
                     console.error(`❌ [KYC Sync] Failed to parse config JSON for user ${row.user_id}:`, parseErr.message);
@@ -115,10 +119,23 @@ async function syncAllKycConfigs() {
                         "",
                         ""
                     );
-                    syncCount++;
+                }
+                verifiedUserIds.add(row.user_id);
+                syncCount++;
+            }
+        });
+
+        // 3. REVOKE: Clear local cache for users whose KYC was deleted from Supabase
+        (users || []).forEach(u => {
+            if (!verifiedUserIds.has(u.id)) {
+                const existing = localDb.getUserConfig(u.id);
+                if (existing && existing.documents_verified) {
+                    console.log(`🚫 [KYC Sync] Revoking stale local cache for: ${u.email}`);
+                    localDb.updateUserDocuments(u.id, u.email, "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", false);
                 }
             }
         });
+
         console.log(`🟢 [KYC Sync] Dynamic Cloud Restore Complete! Synced ${syncCount} user configurations into local cache.`);
     } catch (err) {
         console.error("❌ [KYC Sync] Fatal sync engine failure:", err.message);

@@ -7,8 +7,8 @@ const axios = require('axios');
 async function verifyDocumentImage(imageBuffer, mimeType, expectedId, documentType) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-        console.warn("⚠️ [VISION WARNING] GEMINI_API_KEY is not configured. Bypassing AI verification checks.");
-        return { success: true, isAuthentic: true, matched: true, extractedName: "Demo Name", reason: "Bypassed - API Key missing" };
+        console.error("❌ [VISION ERROR] GEMINI_API_KEY is not configured. Blocking verification to prevent fraud.");
+        return { success: false, isAuthentic: false, matched: false, extractedName: "", reason: "Document verification service is not configured. Please contact support." };
     }
 
     const base64Image = imageBuffer.toString('base64');
