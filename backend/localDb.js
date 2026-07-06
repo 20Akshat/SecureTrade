@@ -44,6 +44,7 @@ function writeDb(data) {
 }
 
 module.exports = {
+    readDb: readDb,
     getUserBalance: (userId, defaultBalance = 100000) => {
         const db = readDb();
         if (db.users[userId]) {

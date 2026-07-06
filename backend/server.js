@@ -1512,6 +1512,38 @@ function parseOptionSymbol(symbol) {
     return { scripName, scripExpiry, strike, type };
 }
 
+function getActiveOptionSymbols() {
+    const symbols = new Set();
+    try {
+        const db = localDb.readDb();
+        if (db && Array.isArray(db.portfolio)) {
+            const holdings = {};
+            db.portfolio.forEach(p => {
+                const key = p.user_id + '_' + p.symbol;
+                holdings[key] = (holdings[key] || 0) + Number(p.quantity);
+            });
+            for (const key in holdings) {
+                if (Math.abs(holdings[key]) > 0) {
+                    const symbol = key.split('_')[1];
+                    if (parseOptionSymbol(symbol)) {
+                        symbols.add(symbol);
+                    }
+                }
+            }
+        }
+        if (db && Array.isArray(db.limit_orders)) {
+            db.limit_orders.forEach(o => {
+                if (o.status === "pending" && parseOptionSymbol(o.symbol)) {
+                    symbols.add(o.symbol);
+                }
+            });
+        }
+    } catch (err) {
+        console.error("❌ Error resolving active option symbols:", err.message);
+    }
+    return Array.from(symbols);
+}
+
 function checkIsOptionExpired(symbol) {
     const parsed = parseOptionSymbol(symbol);
     if (!parsed) return false;
@@ -2111,27 +2143,42 @@ app.post('/api/option-ltp', async (req, res) => {
             console.error(`❌ Sync fetch failed in option-ltp route: ${fetchErr.message}`);
         }
 
-        // Cache does not exist. Compute a fallback price using Black-Scholes model instantly.
-        const spotSymbol = parsed.scripName === 'NIFTY' ? 'NIFTY50' : parsed.scripName;
-        const spot = marketState[spotSymbol]?.currentPrice || marketState[spotSymbol]?.realPrice || 24500;
-        const isCall = parsed.type === "CE";
-        const strike = parseFloat(parsed.strike);
-        const dte = parseDteFromSymbol(symbol);
-        const iv = parsed.scripName === "BANKNIFTY" ? 0.16 : 0.13;
-        const calcPrice = runBlackScholes(spot, strike, dte, isCall, iv);
-        
-        // Trigger async background fetch to populate cache with real broker prices
-        const nfo = item.exch_seg !== 'BFO' ? [item.token] : [];
-        const bfo = item.exch_seg === 'BFO' ? [item.token] : [];
-        fetchAndCacheOptionPrices(nfo, bfo);
+        if (cached) {
+            console.log(`♻️ [Stale Cache Fallback] Sync fetch failed for ${symbol}. Returning stale cache price: ₹${cached.price}`);
+            return res.json({
+                ltp: cached.price,
+                high: cached.high || 0,
+                low: cached.low || 0,
+                close: cached.close || 0,
+                cached: true
+            });
+        }
 
-        return res.json({ 
-            ltp: calcPrice, 
-            high: calcPrice * 1.08,
-            low: calcPrice * 0.92,
-            close: calcPrice * 1.01,
-            cached: false 
-        });
+        // Only allow Black-Scholes fallback when the market is closed!
+        if (!checkIsMarketOpen()) {
+            const spotSymbol = parsed.scripName === 'NIFTY' ? 'NIFTY50' : parsed.scripName;
+            const spot = marketState[spotSymbol]?.currentPrice || marketState[spotSymbol]?.realPrice || 24500;
+            const isCall = parsed.type === "CE";
+            const strike = parseFloat(parsed.strike);
+            const dte = parseDteFromSymbol(symbol);
+            const iv = parsed.scripName === "BANKNIFTY" ? 0.16 : 0.13;
+            const calcPrice = runBlackScholes(spot, strike, dte, isCall, iv);
+            
+            // Trigger async background fetch to populate cache with real broker prices
+            const nfo = item.exch_seg !== 'BFO' ? [item.token] : [];
+            const bfo = item.exch_seg === 'BFO' ? [item.token] : [];
+            fetchAndCacheOptionPrices(nfo, bfo);
+
+            return res.json({ 
+                ltp: calcPrice, 
+                high: calcPrice * 1.08,
+                low: calcPrice * 0.92,
+                close: calcPrice * 1.01,
+                cached: false 
+            });
+        }
+
+        return res.status(503).json({ error: "Option price is currently unavailable. Please try again.", ltp: null });
     } catch (err) {
         res.status(500).json({ error: err.message, ltp: null });
     }
@@ -2164,6 +2211,8 @@ app.get('/api/trades', authMiddleware, async (req, res) => {
                 allTrades = localDb.getPortfolio(req.user.userId);
             }
         }
+
+        allTrades = (allTrades || []).filter(t => t.symbol !== 'KYC_VERIFIED' && !t.symbol.startsWith('KYC_CFG:'));
 
         const symbolStats = {};
         const enrichedTrades = [];
@@ -2994,9 +3043,32 @@ async function fetchAngelPrices() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4000);
     try {
+        const tokensNFO = [];
+        const tokensBFO = [];
+        const activeSymbols = getActiveOptionSymbols();
+        
+        activeSymbols.forEach(symbol => {
+            const parsed = parseOptionSymbol(symbol);
+            if (parsed) {
+                const key = parsed.scripName + '_' + parsed.scripExpiry + '_' + parsed.strike + '_' + parsed.type;
+                const item = scripMap[key];
+                if (item) {
+                    if (item.exch_seg === 'BFO') {
+                        tokensBFO.push(item.token);
+                    } else {
+                        tokensNFO.push(item.token);
+                    }
+                }
+            }
+        });
+
+        const exchangeTokens = { "NSE": ["26000", "26009"], "BSE": ["1"] };
+        if (tokensNFO.length > 0) exchangeTokens["NFO"] = tokensNFO;
+        if (tokensBFO.length > 0) exchangeTokens["BFO"] = tokensBFO;
+
         const res = await axios.post('https://apiconnect.angelbroking.com/rest/secure/angelbroking/market/v1/quote/', {
             mode: "OHLC",
-            exchangeTokens: { "NSE": ["26000", "26009"], "BSE": ["1"] }
+            exchangeTokens
         }, {
             headers: {
                 'Authorization': `Bearer ${angelJwtToken}`,
@@ -3013,9 +3085,9 @@ async function fetchAngelPrices() {
         const data = res.data;
         if (typeof data === 'string') {
             if (data.includes("Access denied") || data.includes("Access Denied")) {
-                console.warn("⚠️ Angel One returned Access Denied (Rate limit hit) in index fetch. Keeping token.");
+                console.warn("⚠️ Angel One returned Access Denied (Rate limit hit) in index/option fetch. Keeping token.");
             }
-            throw new Error(`Non-JSON index price response: ${data.substring(0, 50)}`);
+            throw new Error(`Non-JSON index/option price response: ${data.substring(0, 50)}`);
         }
         const fetched = data?.data?.fetched || [];
         fetched.forEach(item => {
@@ -3031,6 +3103,15 @@ async function fetchAngelPrices() {
                 marketState['SENSEX'].realPrice = item.ltp;
                 if (item.close) marketState['SENSEX'].close = item.close;
                 console.log(`📡 SENSEX: ₹${item.ltp} (Prev Close: ₹${item.close})`);
+            } else if (item.ltp) {
+                optionQuotesCache[item.symbolToken] = {
+                    price: item.ltp,
+                    high: item.high || 0,
+                    low: item.low || 0,
+                    close: item.close || 0,
+                    timestamp: Date.now()
+                };
+                console.log(`📡 [Option Monitor] Cached ${item.tradingSymbol} LTP: ₹${item.ltp} (High: ₹${item.high}, Low: ₹${item.low})`);
             }
         });
         if (fetched.length > 0) {
@@ -3039,12 +3120,12 @@ async function fetchAngelPrices() {
     } catch (err) {
         clearTimeout(timeoutId);
         if (err.name === 'AbortError') {
-            console.log('⚠️ Price fetch timed out');
+            console.log('⚠️ Price/Option fetch timed out');
         } else if (err.status === 401) {
             console.log('🔄 Token expired, re-logging...');
             angelJwtToken = null;
         } else {
-            console.log('⚠️ Price fetch error:', err.message);
+            console.log('⚠️ Price/Option fetch error:', err.message);
         }
     } finally {
         fetchAngelPrices.inProgress = false;
