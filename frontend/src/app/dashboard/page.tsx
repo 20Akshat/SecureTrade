@@ -799,56 +799,11 @@ export default function DashboardPage() {
           >
             <Bell size={16} />
           </button>
-
           {isAutoTradeActive && (
-            <div className="flex bg-slate-100 border border-slate-200 rounded-xl p-0.5 shadow-inner text-[10px] gap-0.5" title="Bot Strategy Selection">
-              <button
-                type="button"
-                onClick={() => setStrategyMode("auto")}
-                className={`px-3 py-1.5 rounded-lg font-black transition-all cursor-pointer ${
-                  strategyMode === "auto"
-                    ? "bg-slate-900 text-white shadow-sm"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                🤖 AI AUTO
-              </button>
-              <button
-                type="button"
-                onClick={() => setStrategyMode("crossover")}
-                className={`px-3 py-1.5 rounded-lg font-black transition-all cursor-pointer ${
-                  strategyMode === "crossover"
-                    ? "bg-slate-900 text-white shadow-sm"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                📈 EMA CROSS
-              </button>
-              <button
-                type="button"
-                onClick={() => setStrategyMode("5ema")}
-                className={`px-3 py-1.5 rounded-lg font-black transition-all cursor-pointer ${
-                  strategyMode === "5ema"
-                    ? "bg-slate-900 text-white shadow-sm"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                🕯️ 5EMA
-              </button>
-              <button
-                type="button"
-                onClick={() => setStrategyMode("gainz")}
-                className={`px-3 py-1.5 rounded-lg font-black transition-all cursor-pointer ${
-                  strategyMode === "gainz"
-                    ? "bg-slate-900 text-white shadow-sm"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                🚀 GAINZ ALGO
-              </button>
+            <div className="bg-slate-100 border border-slate-200 rounded-xl px-3 py-1.5 shadow-inner text-[10px] font-black text-slate-700">
+              🤖 AI Active Strategy: {strategyMode === "crossover" ? "📈 EMA Crossover (Trend)" : "🕯️ 5EMA (Volatility)"}
             </div>
           )}
-
           {isAutoTradeActive && (
             <div className="flex items-center bg-slate-100 border border-slate-200 rounded-xl p-0.5 shadow-inner text-[10px] gap-0.5" title="Target/SL Exit Mode">
               <button

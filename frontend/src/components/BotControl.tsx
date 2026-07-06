@@ -26,19 +26,6 @@ export default function BotControl({ rsi, signal }: BotControlProps) {
         </div>
         
         <div className="flex items-center space-x-4">
-          {/* STRATEGY MODE SELECTOR */}
-          <div className="flex flex-col items-end">
-            <span className="text-[10px] font-extrabold text-purple-400 tracking-wider uppercase mb-1">🎯 Strategy</span>
-            <select
-              value={strategyMode}
-              onChange={(e) => setStrategyMode(e.target.value as any)}
-              className="bg-gray-800 text-white text-xs font-bold rounded-lg px-2 py-1 border border-white/10 focus:outline-none cursor-pointer hover:bg-gray-700 transition-all h-7"
-            >
-              <option value="auto">🤖 AI Auto-Detect (Dynamic)</option>
-              <option value="crossover">RSI + EMA Cross</option>
-              <option value="5ema">Power of Stocks 5EMA</option>
-            </select>
-          </div>
           {/* MAX PREMIUM PRICE SELECTOR */}
           <div className="flex flex-col items-end">
             <span className="text-[10px] font-extrabold text-blue-400 tracking-wider uppercase mb-1">💸 Max Premium</span>
