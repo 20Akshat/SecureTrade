@@ -1222,7 +1222,7 @@ app.post('/api/buy', authMiddleware, async (req, res) => {
             console.log(`⚡ [API BUY] Using client-provided price: ₹${executionPrice}`);
         } else {
             try {
-                executionPrice = await getLivePriceForSymbol(symbol);
+                executionPrice = await getLivePriceForSymbol(symbol, true);
             } catch (priceErr) {
                 console.error(`❌ [API BUY] Price fetch error: ${priceErr.message}`);
                 // Last resort fallback: Black-Scholes calculation
@@ -1344,7 +1344,7 @@ app.post('/api/sell', authMiddleware, async (req, res) => {
             console.log(`⚡ [API SELL] Using client-provided price: ₹${executionPrice}`);
         } else {
             try {
-                executionPrice = await getLivePriceForSymbol(symbol);
+                executionPrice = await getLivePriceForSymbol(symbol, true);
             } catch (priceErr) {
                 console.error(`❌ [API SELL] Price fetch error: ${priceErr.message}`);
                 // Last resort fallback: Black-Scholes calculation
@@ -2687,7 +2687,7 @@ async function fetchAndCacheOptionPrices(tokensNFO, tokensBFO) {
     }
 }
 
-async function getLivePriceForSymbol(symbol) {
+async function getLivePriceForSymbol(symbol, forceFresh = false) {
     // 1. Check if index
     if (marketState[symbol]) {
         return marketState[symbol].currentPrice || marketState[symbol].realPrice;
@@ -2706,20 +2706,22 @@ async function getLivePriceForSymbol(symbol) {
     }
 
     // 3. Check Cache
-    const cached = optionQuotesCache[item.token];
-    if (cached) {
-        // If market is open, use 300ms cache. If closed, use 12 hours to freeze at real close prices.
-        const maxAge = checkIsMarketOpen() ? 300 : (12 * 60 * 60 * 1000);
-        if (Date.now() - cached.timestamp < maxAge) {
-            console.log(`⚡ [Cache Hit] Live Price for ${symbol}: ₹${cached.price}`);
-            return cached.price;
-        } else {
-            // Stale-While-Revalidate: Use stale price immediately, trigger background refresh!
-            console.log(`♻️ [SWR Cache Hit] Stale Price for ${symbol}: ₹${cached.price}. Refreshing background cache...`);
-            const nfo = item.exch_seg !== 'BFO' ? [item.token] : [];
-            const bfo = item.exch_seg === 'BFO' ? [item.token] : [];
-            fetchAndCacheOptionPrices(nfo, bfo).catch(() => {});
-            return cached.price;
+    if (!forceFresh) {
+        const cached = optionQuotesCache[item.token];
+        if (cached) {
+            // If market is open, use 300ms cache. If closed, use 12 hours to freeze at real close prices.
+            const maxAge = checkIsMarketOpen() ? 300 : (12 * 60 * 60 * 1000);
+            if (Date.now() - cached.timestamp < maxAge) {
+                console.log(`⚡ [Cache Hit] Live Price for ${symbol}: ₹${cached.price}`);
+                return cached.price;
+            } else {
+                // Stale-While-Revalidate: Use stale price immediately, trigger background refresh!
+                console.log(`♻️ [SWR Cache Hit] Stale Price for ${symbol}: ₹${cached.price}. Refreshing background cache...`);
+                const nfo = item.exch_seg !== 'BFO' ? [item.token] : [];
+                const bfo = item.exch_seg === 'BFO' ? [item.token] : [];
+                fetchAndCacheOptionPrices(nfo, bfo).catch(() => {});
+                return cached.price;
+            }
         }
     }
 

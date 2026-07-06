@@ -1413,8 +1413,8 @@ export function MarketProvider({ children }: { children: ReactNode }) {
 
         const isGlobalCooldownActive = (Date.now() - lastResolvedEntryTime.current) < 60000;
 
-        // Only scan for signals and show popup alerts when the market is open
-        if (isMarketOpen && !isGlobalCooldownActive && !b.waitingForUser && !b.cooldown) {
+        // Only scan for signals and show popup alerts when the market is open and bot is active
+        if (isMarketOpen && b.isAutoTradeActive && !isGlobalCooldownActive && !b.waitingForUser && !b.cooldown) {
           let scanSymbols = b.enabledSymbols || ["NIFTY50", "BANKNIFTY", "SENSEX"];
 
           // 1. Scan for Zero-Hero (if Zero-Hero is enabled and we don't have a ZH position)
@@ -1901,7 +1901,8 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                   showBrowserNotification("SecureTrade: New Trade Signal! 🚀", `${currentDirection === "CE" ? "📈 CALL (CE)" : "📉 PUT (PE)"} - ${sym} @ ₹${premium.toFixed(2)}`);
                   playVoiceAlert("Trade! Trade! Trade!");
 
-                  // Send SMS Notification Alert
+                  // Send SMS Notification Alert (Disabled for raw signals to stop spam)
+                  /*
                   const alertMessage = `⚠️ [SecureTrade Alert] ${currentDirection === "CE" ? "📈 BUY CALL (CE)" : "📉 BUY PUT (PE)"} - ${sym} at Suggested entry ₹${premium.toFixed(2)}! Target: ₹${(premium * (1 + localTargetPct / 100)).toFixed(2)} | SL: ₹${(premium * (1 - localSlPct / 100)).toFixed(2)}.`;
                   fetch("https://securetrade-n3qh.onrender.com/api/send-sms", {
                     method: "POST",
@@ -1911,6 +1912,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                     },
                     body: JSON.stringify({ message: alertMessage })
                   }).catch(err => console.error("SMS Dispatch error:", err));
+                  */
                 }
               }
             }

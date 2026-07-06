@@ -11,6 +11,7 @@ interface AdminUser {
   balance: number;
   createdAt: string;
   is_blocked?: boolean;
+  is_free_service?: boolean;
 }
 
 interface SupportRequest {
@@ -113,6 +114,23 @@ export default function AdminPanel({ token }: { token: string }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setSuccess("User account deleted successfully.");
+      fetchData();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleToggleFreeService = async (userId: string) => {
+    setError("");
+    setSuccess("");
+    try {
+      const res = await fetch(`https://securetrade-n3qh.onrender.com/api/admin/users/${userId}/toggle-free`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setSuccess("User free service status toggled successfully!");
       fetchData();
     } catch (err: any) {
       setError(err.message);
@@ -268,6 +286,11 @@ export default function AdminPanel({ token }: { token: string }) {
                             Blocked
                           </span>
                         )}
+                        {user.is_free_service && (
+                          <span className="bg-amber-100 text-amber-800 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md">
+                            Free
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="py-3.5 px-4 font-mono text-slate-500">{user.phone}</td>
@@ -285,6 +308,17 @@ export default function AdminPanel({ token }: { token: string }) {
                           Unblock
                         </button>
                       )}
+                      <button
+                        onClick={() => handleToggleFreeService(user.id)}
+                        title={user.is_free_service ? "Disable Free Service" : "Enable Free Service (Exempt Billing)"}
+                        className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer font-bold text-[9px] uppercase tracking-wider ${
+                          user.is_free_service
+                            ? "bg-amber-100 hover:bg-amber-200 text-amber-700"
+                            : "bg-slate-100 hover:bg-slate-200 text-slate-650"
+                        }`}
+                      >
+                        {user.is_free_service ? "Exempted" : "Exempt"}
+                      </button>
                       <button
                         onClick={() => handleResetBalance(user.id)}
                         title="Restore Balance to ₹1,00,000"
