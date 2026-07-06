@@ -759,7 +759,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         b.zhMaxLots = actualLots;
         lastZhOptionPremium.current = activeZhDbPos.averagePrice;
         lastZhOptionFetchTime.current = 0;
-        b.zhIsShort = activeZhDbPos.quantity < 0;
+        b.zhIsShort = activeZhDbPos.symbol.endsWith("PE");
         b.zhHasRecommendedAveraging = false;
 
         b.zhTargetPct = 150;
@@ -814,7 +814,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         b.maxLots = actualLots;
         lastOptionPremium.current = pos1.averagePrice;
         lastOptionFetchTime.current = 0;
-        b.isShort = pos1.quantity < 0;
+        b.isShort = pos1.symbol.endsWith("PE");
         b.hasRecommendedSquareOff = false;
         b.hasRecommendedAveraging = false;
 
@@ -888,7 +888,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         b.entryPrice2 = pos2.averagePrice;
         b.entryTime2 = Date.now();
         b.maxLots2 = actualLots2;
-        b.isShort2 = pos2.quantity < 0;
+        b.isShort2 = pos2.symbol.endsWith("PE");
         b.hasRecommendedSquareOff2 = false;
         b.hasRecommendedAveraging2 = false;
 
@@ -1114,7 +1114,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                 const closePosition = async () => {
                   try {
                     const totalShares = (t.id === 1 ? b.maxLots : b.maxLots2) * posConfig.lotSize;
-                    const endpoint = t.isShort ? "buy" : "sell";
+                    const endpoint = "sell"; // Always sell to exit options
                     const res = await fetch(`https://securetrade-n3qh.onrender.com/api/${endpoint}`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json", Authorization: `Bearer ${b.token}` },
@@ -1153,14 +1153,15 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                 let targetHit = false;
                 let slHit = false;
 
+                // Both CE and PE are bought options, so Target is always upward and SL is always downward
                 if (userTargetPrice && userTargetPrice > 0) {
-                  targetHit = t.isShort ? currentPremium <= userTargetPrice : currentPremium >= userTargetPrice;
+                  targetHit = currentPremium >= userTargetPrice;
                 } else {
                   targetHit = pnlPercent >= maxTarget;
                 }
 
                 if (userSlPrice && userSlPrice > 0) {
-                  slHit = t.isShort ? currentPremium >= userSlPrice : currentPremium <= userSlPrice;
+                  slHit = currentPremium <= userSlPrice;
                 } else {
                   slHit = pnlPercent <= -maxSl;
                 }
@@ -1168,12 +1169,9 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                 if (targetHit || slHit) {
                   const isTarget = targetHit;
                   setBotStatus(`${isTarget ? "🎯 Target" : "🚨 Stop-Loss"} Hit! Selling ${t.symbol} @ ₹${currentPremium.toFixed(2)} (${pnlPercent >= 0 ? "+" : ""}${pnlPercent.toFixed(1)}%)`);
-                  await closePosition();
-                  setBotNotification(null);
-                  b.lastTradedSymbol = getIndexAndDirection(t.symbol);
-                  b.lastExitTime = Date.now();
-
-                   if (t.id === 1) {
+                  
+                  // SYNCHRONOUSLY CLEAR POSITION STATE TO PREVENT WEB SOCKET TICK RACE CONDITIONS
+                  if (t.id === 1) {
                     b.hasPosition = false;
                     b.entryPrice = 0;
                     b.entrySymbol = "";
@@ -1184,6 +1182,11 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                     b.entrySymbol2 = "";
                     b.maxPremium2 = 0;
                   }
+
+                  await closePosition();
+                  setBotNotification(null);
+                  b.lastTradedSymbol = getIndexAndDirection(t.symbol);
+                  b.lastExitTime = Date.now();
 
                   // Send SMS Notification Alert on exit
                   const exitMessage = `✅ [SecureTrade Alert] ${isTarget ? "🎯 Target" : "🚨 Stop-Loss"} Hit! Closed ${t.symbol} @ Suggested price ₹${currentPremium.toFixed(2)} (${pnlPercent >= 0 ? "+" : ""}${pnlPercent.toFixed(1)}% P&L).`;
@@ -1349,10 +1352,10 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                 if (!b.hasZeroHeroPosition || b.zhEntryPrice <= 0) return;
                 const pnlPercent = ((currentPremium - b.zhEntryPrice) / b.zhEntryPrice) * 100;
 
-                const closePosition = async () => {
+                                const closePosition = async () => {
                   try {
                     const totalShares = b.zhMaxLots * posConfig.lotSize;
-                    const endpoint = b.zhIsShort ? "buy" : "sell";
+                    const endpoint = "sell"; // Always sell to close options
                     const res = await fetch(`https://securetrade-n3qh.onrender.com/api/${endpoint}`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json", Authorization: `Bearer ${b.token}` },
@@ -1391,14 +1394,15 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                 let targetHit = false;
                 let slHit = false;
 
+                // Both CE and PE are bought options, so Target is upward and SL is downward
                 if (userTargetPrice && userTargetPrice > 0) {
-                  targetHit = b.zhIsShort ? currentPremium <= userTargetPrice : currentPremium >= userTargetPrice;
+                  targetHit = currentPremium >= userTargetPrice;
                 } else {
                   targetHit = pnlPercent >= maxTarget;
                 }
 
                 if (userSlPrice && userSlPrice > 0) {
-                  slHit = b.zhIsShort ? currentPremium >= userSlPrice : currentPremium <= userSlPrice;
+                  slHit = currentPremium <= userSlPrice;
                 } else {
                   slHit = pnlPercent <= -maxSl;
                 }
@@ -1406,11 +1410,14 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                 if (targetHit || slHit) {
                   const isTarget = targetHit;
                   setBotStatus(`⚡ Zero-Hero ${isTarget ? "🎯 Target" : "🚨 Stop-Loss"} Hit! Selling ${b.zhEntrySymbol} @ ₹${currentPremium.toFixed(2)} (${pnlPercent >= 0 ? "+" : ""}${pnlPercent.toFixed(1)}%)`);
-                  closePosition();
-                  b.lastTradedSymbol = getIndexAndDirection(b.zhEntrySymbol);
-                  b.lastExitTime = Date.now();
+                  
+                  // SYNCHRONOUSLY CLEAR STATE BEFORE AWAIT TO PREVENT WEB SOCKET TICK RACE CONDITIONS
                   b.hasZeroHeroPosition = false;
                   b.zhEntryPrice = 0;
+
+                  await closePosition();
+                  b.lastTradedSymbol = getIndexAndDirection(b.zhEntrySymbol);
+                  b.lastExitTime = Date.now();
                   b.cooldown = true;
                   lastActionTime.current = Date.now();
                   
@@ -1662,30 +1669,39 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                     if (b.hasSecondPosition) {
                       const activeIndex2 = b.entrySymbol2 ? b.entrySymbol2.split(" ")[0] : "";
                       if (activeIndex2 === symToScan) {
+                        // SYNCHRONOUSLY CLEAR STATE BEFORE FETCH TO PREVENT TICK RACE CONDITIONS
+                        b.hasSecondPosition = false;
+                        const savedEntrySymbol2 = b.entrySymbol2;
+                        const savedEntryPrice2 = b.entryPrice2;
+                        const savedMaxLots2 = b.maxLots2;
+                        b.entryPrice2 = 0;
+                        b.entrySymbol2 = "";
+                        b.maxPremium2 = 0;
+
                         try {
                           const configForExit2 = SYMBOL_CONFIG[symToScan] || SYMBOL_CONFIG.NIFTY50;
-                          let exitPremium2 = b.entryPrice2;
+                          let exitPremium2 = savedEntryPrice2;
                           const ltpRes2 = await fetch(`https://securetrade-n3qh.onrender.com/api/option-ltp`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ symbol: b.entrySymbol2 })
+                            body: JSON.stringify({ symbol: savedEntrySymbol2 })
                           });
                           if (ltpRes2.ok) {
                             const ltpData2 = await ltpRes2.json();
                             // 🛡️ GLITCH GUARD: Only use price if it's within sane range
-                            if (ltpData2.ltp && ltpData2.ltp > 0 && ltpData2.ltp < b.entryPrice2 * 2.5 && ltpData2.ltp > b.entryPrice2 * 0.25) {
+                            if (ltpData2.ltp && ltpData2.ltp > 0 && ltpData2.ltp < savedEntryPrice2 * 2.5 && ltpData2.ltp > savedEntryPrice2 * 0.25) {
                               exitPremium2 = ltpData2.ltp;
                             }
                           }
 
-                          const totalShares2 = b.maxLots2 * configForExit2.lotSize;
-                          const endpoint2 = b.isShort2 ? "buy" : "sell";
+                          const totalShares2 = savedMaxLots2 * configForExit2.lotSize;
+                          const endpoint2 = "sell"; // Always sell
                           
                           const exitRes2 = await fetch(`https://securetrade-n3qh.onrender.com/api/${endpoint2}`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json", Authorization: `Bearer ${b.token}` },
                             body: JSON.stringify({
-                              symbol: b.entrySymbol2,
+                              symbol: savedEntrySymbol2,
                               quantity: totalShares2,
                               price: exitPremium2
                             })
@@ -1694,8 +1710,8 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                             const exitData2 = await exitRes2.json();
                             updateBalanceRef.current(exitData2.newBalance);
                             
-                            const pnl2 = ((exitPremium2 - b.entryPrice2) / b.entryPrice2) * 100;
-                            const earlyExitMessage2 = `⚠️ [SecureTrade Alert] Early Reversal Exit! Closed ${b.entrySymbol2} @ Suggested price ₹${exitPremium2.toFixed(2)} (${pnl2 >= 0 ? "+" : ""}${pnl2.toFixed(1)}% P&L) due to trend shift.`;
+                            const pnl2 = ((exitPremium2 - savedEntryPrice2) / savedEntryPrice2) * 100;
+                            const earlyExitMessage2 = `⚠️ [SecureTrade Alert] Early Reversal Exit! Closed ${savedEntrySymbol2} @ Suggested price ₹${exitPremium2.toFixed(2)} (${pnl2 >= 0 ? "+" : ""}${pnl2.toFixed(1)}% P&L) due to trend shift.`;
                             fetch("https://securetrade-n3qh.onrender.com/api/send-sms", {
                               method: "POST",
                               headers: { 
@@ -1704,72 +1720,78 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                               },
                               body: JSON.stringify({ message: earlyExitMessage2 })
                             }).catch(err => console.error("SMS Early Exit 2 Dispatch error:", err));
-
-                            b.hasSecondPosition = false;
-                            b.entryPrice2 = 0;
-                            b.entrySymbol2 = "";
                           }
-                        } catch (err) {
+                        } catch (err: any) {
                           console.error("Trend reversal early exit for position 2 failed:", err);
                         }
                       }
                     }
 
                     // Exit Position 1
-                    try {
-                      const configForExit = SYMBOL_CONFIG[symToScan] || SYMBOL_CONFIG.NIFTY50;
-                      let exitPremium = b.entryPrice;
-                      const ltpRes = await fetch(`https://securetrade-n3qh.onrender.com/api/option-ltp`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ symbol: b.entrySymbol })
-                      });
-                      if (ltpRes.ok) {
-                        const ltpData = await ltpRes.json();
-                        // 🛡️ GLITCH GUARD: Only use price if it's within sane range
-                        if (ltpData.ltp && ltpData.ltp > 0 && ltpData.ltp < b.entryPrice * 2.5 && ltpData.ltp > b.entryPrice * 0.25) {
-                          exitPremium = ltpData.ltp;
-                        }
-                      }
-
-                      const totalShares = b.maxLots * configForExit.lotSize;
-                      const endpoint = b.isShort ? "buy" : "sell";
-                      
-                      setBotStatus(`🔄 Reversal Alert! Executing early exit on ${b.entrySymbol} @ ₹${exitPremium.toFixed(2)} before switching trend...`);
-                      
-                      const exitRes = await fetch(`https://securetrade-n3qh.onrender.com/api/${endpoint}`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${b.token}` },
-                        body: JSON.stringify({
-                          symbol: b.entrySymbol,
-                          quantity: totalShares,
-                          price: exitPremium
-                        })
-                      });
-                      if (exitRes.ok) {
-                        const exitData = await exitRes.json();
-                        updateBalanceRef.current(exitData.newBalance);
-                        
-                        const pnl = ((exitPremium - b.entryPrice) / b.entryPrice) * 100;
-                        const earlyExitMessage = `⚠️ [SecureTrade Alert] Early Reversal Exit! Closed ${b.entrySymbol} @ Suggested price ₹${exitPremium.toFixed(2)} (${pnl >= 0 ? "+" : ""}${pnl.toFixed(1)}% P&L) due to trend shift.`;
-                        fetch("https://securetrade-n3qh.onrender.com/api/send-sms", {
-                          method: "POST",
-                          headers: { 
-                            "Content-Type": "application/json", 
-                            "Authorization": `Bearer ${token || b.token}` 
-                          },
-                          body: JSON.stringify({ message: earlyExitMessage })
-                        }).catch(err => console.error("SMS Early Exit Dispatch error:", err));
-
+                    if (b.hasPosition) {
+                      const activeIndex1 = b.entrySymbol ? b.entrySymbol.split(" ")[0] : "";
+                      if (activeIndex1 === symToScan) {
+                        // SYNCHRONOUSLY CLEAR STATE BEFORE FETCH TO PREVENT TICK RACE CONDITIONS
                         b.hasPosition = false;
+                        const savedEntrySymbol = b.entrySymbol;
+                        const savedEntryPrice = b.entryPrice;
+                        const savedMaxLots = b.maxLots;
                         b.entryPrice = 0;
                         b.entrySymbol = "";
-                        
-                        showBrowserNotification("SecureTrade: Early Reversal Exit! 🔄", `Closed ${b.entrySymbol} @ ₹${exitPremium.toFixed(2)} due to trend shift.`);
-                        playVoiceAlert("Trend shifted! Closed position.");
+                        b.maxPremium1 = 0;
+
+                        try {
+                          const configForExit = SYMBOL_CONFIG[symToScan] || SYMBOL_CONFIG.NIFTY50;
+                          let exitPremium = savedEntryPrice;
+                          const ltpRes = await fetch(`https://securetrade-n3qh.onrender.com/api/option-ltp`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ symbol: savedEntrySymbol })
+                          });
+                          if (ltpRes.ok) {
+                            const ltpData = await ltpRes.json();
+                            // 🛡️ GLITCH GUARD: Only use price if it's within sane range
+                            if (ltpData.ltp && ltpData.ltp > 0 && ltpData.ltp < savedEntryPrice * 2.5 && ltpData.ltp > savedEntryPrice * 0.25) {
+                              exitPremium = ltpData.ltp;
+                            }
+                          }
+
+                          const totalShares = savedMaxLots * configForExit.lotSize;
+                          const endpoint = "sell"; // Always sell
+                          
+                          setBotStatus(`🔄 Reversal Alert! Executing early exit on ${savedEntrySymbol} @ ₹${exitPremium.toFixed(2)} before switching trend...`);
+                          
+                          const exitRes = await fetch(`https://securetrade-n3qh.onrender.com/api/${endpoint}`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", Authorization: `Bearer ${b.token}` },
+                            body: JSON.stringify({
+                              symbol: savedEntrySymbol,
+                              quantity: totalShares,
+                              price: exitPremium
+                            })
+                          });
+                          if (exitRes.ok) {
+                            const exitData = await exitRes.json();
+                            updateBalanceRef.current(exitData.newBalance);
+                            
+                            const pnl = ((exitPremium - savedEntryPrice) / savedEntryPrice) * 100;
+                            const earlyExitMessage = `⚠️ [SecureTrade Alert] Early Reversal Exit! Closed ${savedEntrySymbol} @ Suggested price ₹${exitPremium.toFixed(2)} (${pnl >= 0 ? "+" : ""}${pnl.toFixed(1)}% P&L) due to trend shift.`;
+                            fetch("https://securetrade-n3qh.onrender.com/api/send-sms", {
+                              method: "POST",
+                              headers: { 
+                                "Content-Type": "application/json", 
+                                "Authorization": `Bearer ${token || b.token}` 
+                              },
+                              body: JSON.stringify({ message: earlyExitMessage })
+                            }).catch(err => console.error("SMS Early Exit Dispatch error:", err));
+                            
+                            showBrowserNotification("SecureTrade: Early Reversal Exit! 🔄", `Closed ${savedEntrySymbol} @ ₹${exitPremium.toFixed(2)} due to trend shift.`);
+                            playVoiceAlert("Trend shifted! Closed position.");
+                          }
+                        } catch (err: any) {
+                          console.error("Trend reversal early exit failed:", err);
+                        }
                       }
-                    } catch (err) {
-                      console.error("Trend reversal early exit failed:", err);
                     }
                   }
                 }

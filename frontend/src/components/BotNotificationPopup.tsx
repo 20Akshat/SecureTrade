@@ -42,9 +42,10 @@ export default function BotNotificationPopup() {
           const heroLots = lotCost > 0 ? Math.max(1, Math.floor(1500 / lotCost)) : 1;
           setLots(heroLots);
         } else {
-          // Regular trade or averaging: dynamically target ₹15,000 capital value
-          const targetLots = lotCost > 0 ? Math.max(1, Math.floor(15000 / lotCost)) : 1;
-          setLots(targetLots);
+          // Regular trade or averaging: dynamically target ₹12,000 capital value and respect botMaxLots
+          const calculatedLots = lotCost > 0 ? Math.floor(12000 / lotCost) : 1;
+          const finalLots = Math.max(1, Math.min(calculatedLots, botMaxLots));
+          setLots(finalLots);
         }
       }
     }
