@@ -350,7 +350,7 @@ module.exports = {
         if (!u) return null;
         const isAdmin = u.email === "akshatmarwadi5@gmail.com";
         const createdTime = new Date(u.created_at || Date.now()).getTime();
-        const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+        const threeDaysMs = 7 * 24 * 60 * 60 * 1000;
         const isTrialActive = (Date.now() - createdTime) < threeDaysMs;
         return {
             referralCode: u.referral_code || "N/A",
@@ -368,7 +368,7 @@ module.exports = {
         
         const isAdmin = u.email === "akshatmarwadi5@gmail.com";
         const createdTime = new Date(u.created_at || Date.now()).getTime();
-        const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+        const threeDaysMs = 7 * 24 * 60 * 60 * 1000;
         const isTrialActive = (Date.now() - createdTime) < threeDaysMs;
         
         const todayStr = new Date().toISOString().split('T')[0];
@@ -420,8 +420,8 @@ module.exports = {
         if (u.email === "akshatmarwadi5@gmail.com") return false;
         if (u.is_free_service) return false; // Exempt from invoice locks
         const createdTime = new Date(u.created_at || Date.now()).getTime();
-        const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
-        if (Date.now() - createdTime < threeDaysMs) return false;
+        const trialDaysMs = 7 * 24 * 60 * 60 * 1000;
+        if (Date.now() - createdTime <trialDaysMs) return false;
         return (u.unpaid_commission_invoice || 0) > 0;
     },
     addPaymentRequest: (userId, email, amount, utr, type = "commission") => {

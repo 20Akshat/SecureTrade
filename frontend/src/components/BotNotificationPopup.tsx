@@ -28,12 +28,17 @@ export default function BotNotificationPopup() {
   useEffect(() => {
     hasAttemptedRef.current = false;
     setPopupError("");
+    setLoading(false); // Reset loading state so button shows "Confirm" instead of "⏳..."
   }, [botNotification?.id]);
 
   useEffect(() => {
     if (botNotification) {
       if (botNotification.action === "SQUARE_OFF") {
         setLots(botNotification.lots || 1);
+      } else if (botNotification.action === "BUY_MORE") {
+        // Suggested lots for averaging: Match original lots size, capped by botMaxLots
+        const originalLots = botNotification.lots || 1;
+        setLots(Math.min(originalLots, botMaxLots));
       } else {
         const indexName = Object.keys(LOT_SIZES).find(k => botNotification.symbol.includes(k)) || "NIFTY50";
         const lotSize = LOT_SIZES[indexName];
@@ -97,6 +102,7 @@ export default function BotNotificationPopup() {
           symbol: botNotification.symbol,
           quantity: totalShares,
           isAutoTrade: true,
+          price: botNotification.premium // Pass real premium price!
         }),
         signal: controller.signal
       });
@@ -150,12 +156,16 @@ export default function BotNotificationPopup() {
           </div>
           <div>
             <p className="text-slate-800 font-extrabold text-lg">
-              {isSquareOff ? "Auto Advisor Exit" : isBuyMore ? "Auto Advisor Average" : "Auto Advisor Signal"}
+              {botNotification.isSureTrade 
+                ? "🔥 SURE TRADE (99% SURE)" 
+                : (isSquareOff ? "Auto Advisor Exit" : isBuyMore ? "Auto Advisor Average" : "Auto Advisor Signal")}
             </p>
             <p className={`text-xs font-bold uppercase tracking-wider ${
-              isSquareOff ? "text-amber-600" : isCE ? "text-green-600" : "text-red-600"
+              botNotification.isSureTrade ? "text-amber-500 animate-pulse font-black" : (isSquareOff ? "text-amber-600" : isCE ? "text-green-600" : "text-red-600")
             }`}>
-              {isSquareOff ? "⚠️ EARLY SQUARE OFF" : isCE ? "📈 BULLISH - Buy CALL" : "📉 BEARISH - Buy PUT"}
+              {botNotification.isSureTrade 
+                ? "🏆 100% PROFIT SETUP" 
+                : (isSquareOff ? "⚠️ EARLY SQUARE OFF" : isCE ? "📈 BULLISH - Buy CALL" : "📉 BEARISH - Buy PUT")}
             </p>
           </div>
         </div>

@@ -3121,17 +3121,33 @@ async function fetchAngelPrices() {
         const fetched = data?.data?.fetched || [];
         fetched.forEach(item => {
             if (item.symbolToken === '26000' && item.ltp) {
-                marketState['NIFTY50'].realPrice = item.ltp;
-                if (item.close) marketState['NIFTY50'].close = item.close;
-                console.log(`📡 NIFTY50: ₹${item.ltp} (Prev Close: ₹${item.close})`);
+                const prev = marketState['NIFTY50'].realPrice;
+                // Reject sudden index jumps/crashes > 2% in a single tick
+                if (prev && Math.abs(item.ltp - prev) / prev > 0.02) {
+                    console.warn(`🚨 [Spot Glitch Guard] Rejected NIFTY50 spike/crash: ${prev} -> ${item.ltp}`);
+                } else {
+                    marketState['NIFTY50'].realPrice = item.ltp;
+                    if (item.close) marketState['NIFTY50'].close = item.close;
+                    console.log(`📡 NIFTY50: ₹${item.ltp} (Prev Close: ₹${item.close})`);
+                }
             } else if (item.symbolToken === '26009' && item.ltp) {
-                marketState['BANKNIFTY'].realPrice = item.ltp;
-                if (item.close) marketState['BANKNIFTY'].close = item.close;
-                console.log(`📡 BANKNIFTY: ₹${item.ltp} (Prev Close: ₹${item.close})`);
+                const prev = marketState['BANKNIFTY'].realPrice;
+                if (prev && Math.abs(item.ltp - prev) / prev > 0.02) {
+                    console.warn(`🚨 [Spot Glitch Guard] Rejected BANKNIFTY spike/crash: ${prev} -> ${item.ltp}`);
+                } else {
+                    marketState['BANKNIFTY'].realPrice = item.ltp;
+                    if (item.close) marketState['BANKNIFTY'].close = item.close;
+                    console.log(`📡 BANKNIFTY: ₹${item.ltp} (Prev Close: ₹${item.close})`);
+                }
             } else if (item.symbolToken === '1' && item.ltp) {
-                marketState['SENSEX'].realPrice = item.ltp;
-                if (item.close) marketState['SENSEX'].close = item.close;
-                console.log(`📡 SENSEX: ₹${item.ltp} (Prev Close: ₹${item.close})`);
+                const prev = marketState['SENSEX'].realPrice;
+                if (prev && Math.abs(item.ltp - prev) / prev > 0.02) {
+                    console.warn(`🚨 [Spot Glitch Guard] Rejected SENSEX spike/crash: ${prev} -> ${item.ltp}`);
+                } else {
+                    marketState['SENSEX'].realPrice = item.ltp;
+                    if (item.close) marketState['SENSEX'].close = item.close;
+                    console.log(`📡 SENSEX: ₹${item.ltp} (Prev Close: ₹${item.close})`);
+                }
             } else if (item.ltp) {
                 optionQuotesCache[item.symbolToken] = {
                     price: item.ltp,
@@ -3561,22 +3577,6 @@ const globalUpdateInterval = setInterval(async () => {
             curState.currentCandleLow = price;
             curState.tickCount = 0;
 
-            if (curState.history.length >= 5 && curState.candles.length >= 1) {
-                const ema5 = calculateEMA(curState.history, 5);
-                const lastCandle = curState.candles[curState.candles.length - 1];
-                
-                if (lastCandle.low > ema5) {
-                    curState.peAlertLow = lastCandle.low;
-                    curState.peAlertHigh = lastCandle.high;
-                    curState.ceAlertHigh = null;
-                    console.log(`🕯️ [5EMA PE Alert] ${symbol} candle low ${lastCandle.low} is above 5EMA ${ema5.toFixed(2)}`);
-                } else if (lastCandle.high < ema5) {
-                    curState.ceAlertHigh = lastCandle.high;
-                    curState.ceAlertLow = lastCandle.low;
-                    curState.peAlertLow = null;
-                    console.log(`🕯️ [5EMA CE Alert] ${symbol} candle high ${lastCandle.high} is below 5EMA ${ema5.toFixed(2)}`);
-                }
-            }
         }
         
         const activeHistory = [...curState.history, price];
@@ -3591,26 +3591,86 @@ const globalUpdateInterval = setInterval(async () => {
         if (open) {
             signal = generateSignal(rsi, activeHistory, symbol);
             signalGainz = generateSignalGainz(rsi, activeHistory, symbol);
-            
-            if (curState.ceAlertHigh && price > curState.ceAlertHigh) {
-                signal5ema = "BUY (5EMA Breakout)";
-                const rawSl = ((price - curState.ceAlertLow) / price) * 100;
-                slPct5ema = Math.max(1.5, Math.min(20, rawSl));
-                targetPct5ema = slPct5ema * 3;
-                curState.ceAlertHigh = null;
-                console.log(`🎯 [5EMA Buy Trigger] ${symbol} price ${price} broke high (SL: -${slPct5ema.toFixed(1)}%)`);
-            } else if (curState.peAlertLow && price < curState.peAlertLow) {
-                signal5ema = "SELL (5EMA Breakout)";
-                const rawSl = ((curState.peAlertHigh - price) / price) * 100;
-                slPct5ema = Math.max(1.5, Math.min(20, rawSl));
-                targetPct5ema = slPct5ema * 3;
-                curState.peAlertLow = null;
-                console.log(`🎯 [5EMA Sell Trigger] ${symbol} price ${price} broke low (SL: -${slPct5ema.toFixed(1)}%)`);
+
+            // Compute indicators needed for 5EMA family
+            if (curState.history.length >= 5 && curState.candles.length >= 1) {
+                const ema5Arr = calculateEMA(curState.history, 5);
+                const ema9Arr = calculateEMA(curState.history, 9);
+                const ema21Arr = calculateEMA(curState.history, 21);
+                const ema50Arr = calculateEMA(curState.history, 50);
+                const atrArr = calculateATR(curState.candles || [], 14);
+
+                const ema5 = ema5Arr[ema5Arr.length - 1];
+                const ema9 = ema9Arr[ema9Arr.length - 1];
+                const ema21 = ema21Arr[ema21Arr.length - 1];
+                const ema50 = ema50Arr[ema50Arr.length - 1];
+                const activeAtr = atrArr[atrArr.length - 1] || (symbol === "BANKNIFTY" ? 45 : (symbol === "SENSEX" ? 50 : 15));
+
+                const lastCandle = curState.candles[curState.candles.length - 1];
+
+                // Reset indicators at the boundary of a new candle
+                if (curState.tickCount === 0) {
+                    curState.pullbackCeAlert = false;
+                    curState.pullbackPeAlert = false;
+
+                    const trendBullish = ema9 > ema21 && ema21 > ema50;
+                    const trendBearish = ema9 < ema21 && ema21 < ema50;
+
+                    if (symbol === "SENSEX") {
+                        if (trendBullish && lastCandle.low <= ema5 && lastCandle.close > ema5) {
+                            curState.pullbackCeAlert = true;
+                            curState.pullbackCeSl = lastCandle.low - 5;
+                            curState.pullbackHigh = lastCandle.high;
+                        } else if (trendBearish && lastCandle.high >= ema5 && lastCandle.close < ema5) {
+                            curState.pullbackPeAlert = true;
+                            curState.pullbackPeSl = lastCandle.high + 5;
+                            curState.pullbackLow = lastCandle.low;
+                        }
+                    }
+                }
+
+                // 5EMA Reversion (Mean Reversion) for BANKNIFTY
+                if (symbol === "BANKNIFTY") {
+                    const extension = 1.2 * activeAtr;
+                    const overextendedBelow = lastCandle.close < ema5 - extension;
+                    const overextendedAbove = lastCandle.close > ema5 + extension;
+
+                    if (overextendedBelow && rsi < 30) {
+                        signal5ema = "BUY (5EMA Reversion)";
+                        const rawSl = ((price - (lastCandle.low - 5)) / price) * 100;
+                        slPct5ema = Math.max(10, Math.min(25, rawSl * 0.55));
+                        const rawTarget = (Math.abs(price - ema5) / price) * 100;
+                        targetPct5ema = Math.max(12, Math.min(45, rawTarget * 0.55));
+                    } else if (overextendedAbove && rsi > 70) {
+                        signal5ema = "SELL (5EMA Reversion)";
+                        const rawSl = (((lastCandle.high + 5) - price) / price) * 100;
+                        slPct5ema = Math.max(10, Math.min(25, rawSl * 0.55));
+                        const rawTarget = (Math.abs(price - ema5) / price) * 100;
+                        targetPct5ema = Math.max(12, Math.min(45, rawTarget * 0.55));
+                    }
+                }
+
+                // 5EMA Pullback (Support Entry) for SENSEX
+                if (symbol === "SENSEX") {
+                    if (curState.pullbackCeAlert && price > curState.pullbackHigh) {
+                        signal5ema = "BUY (5EMA Pullback)";
+                        const rawSl = ((price - curState.pullbackCeSl) / price) * 100;
+                        slPct5ema = Math.max(10, Math.min(25, rawSl * 0.55));
+                        targetPct5ema = slPct5ema * 2.0; // 1:2 RR
+                        curState.pullbackCeAlert = false;
+                    } else if (curState.pullbackPeAlert && price < curState.pullbackLow) {
+                        signal5ema = "SELL (5EMA Pullback)";
+                        const rawSl = ((curState.pullbackPeSl - price) / price) * 100;
+                        slPct5ema = Math.max(10, Math.min(25, rawSl * 0.55));
+                        targetPct5ema = slPct5ema * 2.0; // 1:2 RR
+                        curState.pullbackPeAlert = false;
+                    }
+                }
             }
         } else {
             // Reset temporary alerts when market is closed
-            curState.ceAlertHigh = null;
-            curState.peAlertLow = null;
+            curState.pullbackCeAlert = false;
+            curState.pullbackPeAlert = false;
         }
 
         curState.lastRsi = rsi;

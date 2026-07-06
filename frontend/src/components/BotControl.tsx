@@ -37,7 +37,6 @@ export default function BotControl({ rsi, signal }: BotControlProps) {
               <option value="auto">🤖 AI Auto-Detect (Dynamic)</option>
               <option value="crossover">RSI + EMA Cross</option>
               <option value="5ema">Power of Stocks 5EMA</option>
-              <option value="gainz">Gainz Algo Suite</option>
             </select>
           </div>
           {/* MAX PREMIUM PRICE SELECTOR */}

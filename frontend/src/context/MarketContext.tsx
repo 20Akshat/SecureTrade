@@ -28,6 +28,7 @@ export interface BotNotification {
   targetPct?: number;
   slPct?: number;
   isZeroHero?: boolean;
+  isSureTrade?: boolean; // Add this line!
 }
 
 export interface ActiveTrade {
@@ -304,6 +305,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   const updateBalanceRef = useRef(updateBalance);
   const balanceRef = useRef(balance);
   const lastMarketDataRef = useRef<Record<string, MarketData>>({});
+  const lastUiUpdateRef = useRef<number>(0);
   const lastResolvedEntryTime = useRef<number>(0);
   
   const lastActionTime = useRef<number>(0);
@@ -352,6 +354,31 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       }
     }
   };
+
+  // 🛡️ Smart Recovery Init: Fetch last closed trade status on load to set recovery filter
+  useEffect(() => {
+    if (!token) return;
+    const initLastTradeOutcome = async () => {
+      try {
+        const res = await fetch("https://securetrade-n3qh.onrender.com/api/trades", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            const closedTrade = data.find((t: any) => t.status !== 'open' && !t.symbol.startsWith("KYC_CFG"));
+            if (closedTrade) {
+              bot.current.lastTradeWasLoss = (Number(closedTrade.pnl || 0) < 0);
+              console.log(`🤖 [Bot Init] Last closed trade ${closedTrade.symbol} P&L: ₹${closedTrade.pnl}. lastTradeWasLoss initialized to: ${bot.current.lastTradeWasLoss}`);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error initializing last trade outcome:", e);
+      }
+    };
+    initLastTradeOutcome();
+  }, [token]);
 
   const playVoiceAlert = (text: string) => {
     if (typeof window !== "undefined" && window.speechSynthesis) {
@@ -567,6 +594,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
               limits[b.entrySymbol2] = {
                 sl: parseFloat(stopLossPrice.toFixed(2)),
                 target: parseFloat(targetPrice.toFixed(2)),
+                targetActive: false,
                 qty: b.maxLots2 * config.lotSize
               };
               localStorage.setItem("st_active_limits", JSON.stringify(limits));
@@ -604,7 +632,8 @@ export function MarketProvider({ children }: { children: ReactNode }) {
               const limits = storedLimits ? JSON.parse(storedLimits) : {};
               limits[b.entrySymbol] = {
                 sl: parseFloat(stopLossPrice.toFixed(2)),
-                target: parseFloat(targetPrice.toFixed(2)),
+                target: parseFloat(targetPrice.toFixed(2)), // Suggest target from start
+                targetActive: false, // Inactive on entry, let profit run
                 qty: b.maxLots * config.lotSize
               };
               localStorage.setItem("st_active_limits", JSON.stringify(limits));
@@ -635,7 +664,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           
           b.zhEntryPrice = newAveragePrice;
           b.zhMaxLots = newTotalLots;
-          b.zhHasRecommendedAveraging = false;
+          // REMOVED: b.zhHasRecommendedAveraging = false (No more than 1 average)
           
           const targetPrice = newAveragePrice * (1 + b.zhTargetPct / 100);
           const stopLossPrice = newAveragePrice * (1 - b.zhSlPct / 100);
@@ -654,32 +683,62 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           setTimeout(() => { b.cooldown = false; }, 15000);
           setBotStatus(`⚡ ZH Position Averaged: ${b.zhEntrySymbol} | New Avg: ₹${newAveragePrice.toFixed(2)} | Total Lots: ${newTotalLots}`);
         } else {
-          const prevLots = b.maxLots;
-          const prevPrice = b.entryPrice;
-          const currentPrice = finalPrice;
-          const newTotalLots = prevLots + extraLots;
-          const newAveragePrice = ((prevPrice * prevLots) + (currentPrice * extraLots)) / newTotalLots;
-          
-          b.entryPrice = newAveragePrice;
-          b.maxLots = newTotalLots;
-          b.hasRecommendedAveraging = false;
-          
-          const targetPrice = newAveragePrice * (1 + (b.targetPct || 20) / 100);
-          const stopLossPrice = newAveragePrice * (1 - (b.slPct || 15) / 100);
+          const isPos1 = botNotification.symbol === b.entrySymbol;
+          if (isPos1) {
+            const prevLots = b.maxLots;
+            const prevPrice = b.entryPrice;
+            const currentPrice = finalPrice;
+            const newTotalLots = prevLots + extraLots;
+            const newAveragePrice = ((prevPrice * prevLots) + (currentPrice * extraLots)) / newTotalLots;
+            
+            b.entryPrice = newAveragePrice;
+            b.maxLots = newTotalLots;
+            // REMOVED: b.hasRecommendedAveraging = false (No more than 1 average)
+            
+            const targetPrice = newAveragePrice * (1 + (b.targetPct || 20) / 100);
+            const stopLossPrice = newAveragePrice * (1 - (b.slPct || 15) / 100);
 
-          if (selectedSymbol === b.entrySymbol) {
-            setActiveBotTrade({
-              symbol: b.entrySymbol,
-              entryPrice: newAveragePrice,
-              targetPrice,
-              stopLossPrice,
-              entryTime: b.entryTime
-            });
+            if (selectedSymbol === b.entrySymbol) {
+              setActiveBotTrade({
+                symbol: b.entrySymbol,
+                entryPrice: newAveragePrice,
+                targetPrice,
+                stopLossPrice,
+                entryTime: b.entryTime
+              });
+            }
+            
+            b.cooldown = true;
+            setTimeout(() => { b.cooldown = false; }, 15000);
+            setBotStatus(`📊 Position 1 Averaged: ${b.entrySymbol} | New Avg: ₹${newAveragePrice.toFixed(2)} | Total Lots: ${newTotalLots}`);
+          } else {
+            const prevLots = b.maxLots2;
+            const prevPrice = b.entryPrice2;
+            const currentPrice = finalPrice;
+            const newTotalLots = prevLots + extraLots;
+            const newAveragePrice = ((prevPrice * prevLots) + (currentPrice * extraLots)) / newTotalLots;
+            
+            b.entryPrice2 = newAveragePrice;
+            b.maxLots2 = newTotalLots;
+            // REMOVED: b.hasRecommendedAveraging2 = false (No more than 1 average)
+            
+            const targetPrice = newAveragePrice * (1 + (b.targetPct2 || 20) / 100);
+            const stopLossPrice = newAveragePrice * (1 - (b.slPct2 || 15) / 100);
+
+            if (selectedSymbol === b.entrySymbol2) {
+              setActiveBotTrade({
+                symbol: b.entrySymbol2,
+                entryPrice: newAveragePrice,
+                targetPrice,
+                stopLossPrice,
+                entryTime: b.entryTime2
+              });
+            }
+            
+            b.cooldown = true;
+            setTimeout(() => { b.cooldown = false; }, 15000);
+            setBotStatus(`📊 Position 2 Averaged: ${b.entrySymbol2} | New Avg: ₹${newAveragePrice.toFixed(2)} | Total Lots: ${newTotalLots}`);
           }
-          
-          b.cooldown = true;
-          setTimeout(() => { b.cooldown = false; }, 15000);
-          setBotStatus(`📊 Position Averaged: ${b.entrySymbol} | New Avg: ₹${newAveragePrice.toFixed(2)} | Total Lots: ${newTotalLots}`);
         }
       } else if (action === "SQUARE_OFF") {
         if (isZH) {
@@ -740,7 +799,8 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       if (storedLimits) limits = JSON.parse(storedLimits);
     } catch {}
 
-    const activeDbPositions = positions.filter(p => Math.abs(p.quantity) > 0);
+    // Filter out KYC config rows so they don't block option trades
+    const activeDbPositions = positions.filter(p => Math.abs(p.quantity) > 0 && !p.symbol.startsWith("KYC_CFG"));
     const activeZhDbPos = activeDbPositions.find(p => limits[p.symbol]?.isZeroHero);
     const activeNormalDbPos = activeDbPositions.find(p => !limits[p.symbol]?.isZeroHero);
 
@@ -964,17 +1024,23 @@ export function MarketProvider({ children }: { children: ReactNode }) {
             openStatus = raw[sym].isMarketOpen;
           }
         }
-        setMarketData(formatted);
-        setIsMarketOpen(openStatus);
 
-        // Update refs for transition checks
+        // Update refs for transition checks and UI updates
         const prevMarketData = { ...lastMarketDataRef.current };
-        for (const sym in raw) {
-          lastMarketDataRef.current[sym] = {
-            price: parseFloat(raw[sym].price),
-            rsi: parseFloat(raw[sym].rsi),
-            signal: raw[sym].signal
-          };
+        for (const sym in formatted) {
+          lastMarketDataRef.current[sym] = { ...formatted[sym] };
+        }
+
+        // Throttle UI re-renders to max once per 300ms to keep page smooth
+        const now = Date.now();
+        if (now - lastUiUpdateRef.current >= 300) {
+          const uiData: any = {};
+          for (const sym in lastMarketDataRef.current) {
+            uiData[sym] = { ...lastMarketDataRef.current[sym] };
+          }
+          setMarketData(uiData);
+          setIsMarketOpen(openStatus);
+          lastUiUpdateRef.current = now;
         }
 
         const b = bot.current;
@@ -1153,17 +1219,43 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                 let targetHit = false;
                 let slHit = false;
 
-                // Both CE and PE are bought options, so Target is always upward and SL is always downward
-                if (userTargetPrice && userTargetPrice > 0) {
-                  targetHit = currentPremium >= userTargetPrice;
-                } else {
-                  targetHit = pnlPercent >= maxTarget;
-                }
-
+                // Stop Loss is ALWAYS active to protect capital
                 if (userSlPrice && userSlPrice > 0) {
                   slHit = currentPremium <= userSlPrice;
                 } else {
                   slHit = pnlPercent <= -maxSl;
+                }
+
+                // Target Exit Logic:
+                try {
+                  const storedLimits = localStorage.getItem("st_active_limits");
+                  const limits = storedLimits ? JSON.parse(storedLimits) : {};
+                  const limit = limits[t.symbol];
+                  
+                  const isTargetActive = limit ? !!limit.targetActive : false;
+                  
+                  if (userTargetPrice && userTargetPrice > 0) {
+                    if (isTargetActive) {
+                      // Target is active (either user confirmed or 2 minutes passed)
+                      targetHit = currentPremium >= userTargetPrice;
+                    } else {
+                      // Target is suggested but not active yet.
+                      if (elapsedSeconds >= 120) {
+                        // 2 minutes passed! Auto-activate it now if premium is still below target
+                        if (currentPremium < userTargetPrice) {
+                          console.log(`🤖 [Auto-Target] 2 minutes elapsed. Auto-activating target for ${t.symbol} @ ₹${userTargetPrice.toFixed(2)}`);
+                          limits[t.symbol].targetActive = true;
+                          localStorage.setItem("st_active_limits", JSON.stringify(limits));
+                        }
+                      }
+                      targetHit = false; // Profit is allowed to run for now
+                    }
+                  } else {
+                    // Fallback to default target percent check if no limit object exists
+                    targetHit = pnlPercent >= maxTarget;
+                  }
+                } catch {
+                  targetHit = pnlPercent >= maxTarget;
                 }
 
                 if (targetHit || slHit) {
@@ -1237,57 +1329,63 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                       ? posActive.signal5ema
                       : (posStrategy === "gainz" ? posActive.signalGainz : posActive.signal);
                     
-                    if (isCall) {
-                      if ((posRsi < 35 || isMAStrongBuy) && pnlPercent < -6 && elapsedSeconds > 25 && !t.hasRecommendedAveraging) {
-                        const avgCost = currentPremium * posConfig.lotSize;
-                        if (balanceRef.current < avgCost) {
-                          console.log("Insufficient funds to average normal trade");
-                        } else {
-                          b.waitingForUser = true;
-                          if (t.id === 1) b.hasRecommendedAveraging = true;
-                          else b.hasRecommendedAveraging2 = true;
-
-                          setBotNotification({
-                            id: Date.now().toString(),
-                            symbol: t.symbol,
-                            type: "CE",
-                            strike,
-                            premium: currentPremium,
-                            action: "BUY_MORE",
-                            reason: `📈 Market support is strong at ₹${posSpot.toFixed(0)} (RSI: ${posRsi.toFixed(1)} & Trend: ${activeSignalLabel}). Suggesting BUY MORE (Average) to maximize potential profit.`,
-                            timestamp: new Date()
-                          });
-                          setBotStatus(`🔔 Recommendation: Average Position! Buy more ${t.symbol}`);
-                          showBrowserNotification("SecureTrade: Averaging Suggestion! 📈", `Suggesting average for ${t.symbol} @ ₹${currentPremium.toFixed(2)}`);
-                          playVoiceAlert("Average trade! Average trade!");
-                        }
-                      }
-                    } else {
-                      if ((posRsi > 65 || isMAStrongSell) && pnlPercent < -6 && elapsedSeconds > 25 && !t.hasRecommendedAveraging) {
-                        const avgCost = currentPremium * posConfig.lotSize;
-                        if (balanceRef.current < avgCost) {
-                          console.log("Insufficient funds to average normal trade");
-                        } else {
-                          b.waitingForUser = true;
-                          if (t.id === 1) b.hasRecommendedAveraging = true;
-                          else b.hasRecommendedAveraging2 = true;
-
-                          setBotNotification({
-                            id: Date.now().toString(),
-                            symbol: t.symbol,
-                            type: "PE",
-                            strike,
-                            premium: currentPremium,
-                            action: "BUY_MORE",
-                            reason: `📉 Market resistance is strong at ₹${posSpot.toFixed(0)} (RSI: ${posRsi.toFixed(1)} & Trend: ${activeSignalLabel}). Suggesting BUY MORE (Average) to maximize potential profit.`,
-                            timestamp: new Date()
-                          });
-                          setBotStatus(`🔔 Recommendation: Average Position! Buy more ${t.symbol}`);
-                          showBrowserNotification("SecureTrade: Averaging Suggestion! 📉", `Suggesting average for ${t.symbol} @ ₹${currentPremium.toFixed(2)}`);
-                          playVoiceAlert("Average trade! Average trade!");
-                        }
-                      }
-                    }
+                                         if (isCall) {
+                       const has21EmaSupport = posSpot > (posActive.ema21 || posSpot);
+                       // Suggest average if price is pulling back but still supported by 21 EMA or oversold (RSI < 38)
+                       if ((posRsi < 38 || isMAStrongBuy || has21EmaSupport) && pnlPercent < -6 && elapsedSeconds > 25 && !t.hasRecommendedAveraging) {
+                         const avgCost = currentPremium * posConfig.lotSize;
+                         if (balanceRef.current < avgCost) {
+                           console.log("Insufficient funds to average normal trade");
+                         } else {
+                           b.waitingForUser = true;
+                           if (t.id === 1) b.hasRecommendedAveraging = true;
+                           else b.hasRecommendedAveraging2 = true;
+ 
+                           setBotNotification({
+                             id: Date.now().toString(),
+                             symbol: t.symbol,
+                             type: "CE",
+                             strike,
+                             premium: currentPremium,
+                             action: "BUY_MORE",
+                             lots: t.id === 1 ? b.maxLots : b.maxLots2, // Send original lots
+                             reason: `📈 Market pullback detected but 21 EMA support is holding strong at ₹${posSpot.toFixed(0)} (RSI: ${posRsi.toFixed(1)}). Suggesting BUY MORE (Average) to lower entry cost and maximize profit.`,
+                             timestamp: new Date()
+                           });
+                           setBotStatus(`🔔 Recommendation: Average Position! Buy more ${t.symbol}`);
+                           showBrowserNotification("SecureTrade: Averaging Suggestion! 📈", `Suggesting average for ${t.symbol} @ ₹${currentPremium.toFixed(2)}`);
+                           playVoiceAlert("Average trade! Average trade!");
+                         }
+                       }
+                     } else {
+                       const has21EmaResistance = posSpot < (posActive.ema21 || posSpot);
+                       // Suggest average if price is bouncing but still below 21 EMA resistance or overbought (RSI > 62)
+                       if ((posRsi > 62 || isMAStrongSell || has21EmaResistance) && pnlPercent < -6 && elapsedSeconds > 25 && !t.hasRecommendedAveraging) {
+                         const avgCost = currentPremium * posConfig.lotSize;
+                         if (balanceRef.current < avgCost) {
+                           console.log("Insufficient funds to average normal trade");
+                         } else {
+                           b.waitingForUser = true;
+                           if (t.id === 1) b.hasRecommendedAveraging = true;
+                           else b.hasRecommendedAveraging2 = true;
+ 
+                           setBotNotification({
+                             id: Date.now().toString(),
+                             symbol: t.symbol,
+                             type: "PE",
+                             strike,
+                             premium: currentPremium,
+                             action: "BUY_MORE",
+                             lots: t.id === 1 ? b.maxLots : b.maxLots2, // Send original lots
+                             reason: `📉 Market bounce detected but 21 EMA resistance is holding strong at ₹${posSpot.toFixed(0)} (RSI: ${posRsi.toFixed(1)}). Suggesting BUY MORE (Average) to lower entry cost and maximize profit.`,
+                             timestamp: new Date()
+                           });
+                           setBotStatus(`🔔 Recommendation: Average Position! Buy more ${t.symbol}`);
+                           showBrowserNotification("SecureTrade: Averaging Suggestion! 📉", `Suggesting average for ${t.symbol} @ ₹${currentPremium.toFixed(2)}`);
+                           playVoiceAlert("Average trade! Average trade!");
+                         }
+                       }
+                     }
                   }
                 }
               }
@@ -1593,12 +1691,10 @@ export function MarketProvider({ children }: { children: ReactNode }) {
               let activeStrategy: "crossover" | "5ema" | "gainz" = "crossover";
               if (b.strategyMode === "auto") {
                 const targetMult = activeSymbolData.targetMultiplier ?? 1.8;
-                if (targetMult <= 1.3) {
+                if (targetMult <= 1.8) {
                   activeStrategy = "5ema";
-                } else if (targetMult >= 2.4) {
-                  activeStrategy = "crossover";
                 } else {
-                  activeStrategy = "gainz";
+                  activeStrategy = "crossover";
                 }
               } else {
                 activeStrategy = b.strategyMode as any;
@@ -1666,9 +1762,22 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                     console.log(`🔄 [Trend Reversal] Opposite signal (${currentDirection}) detected against existing position (${existingDirection}) on ${symToScan}. Executing early exit...`);
                     
                     // Exit Position 2 if active and index matches
+                                       // Exit Position 2 if active and index matches
                     if (b.hasSecondPosition) {
                       const activeIndex2 = b.entrySymbol2 ? b.entrySymbol2.split(" ")[0] : "";
                       if (activeIndex2 === symToScan) {
+                        // Algorithm-based reversal confirmation
+                        const isCE = !b.isShort2; 
+                        const ema9 = activeSymbolData.ema9;
+                        const isReversalConfirmed = isCE
+                          ? (rsi < 48 && spot < (ema9 || spot)) // Only exit CE if RSI drops below 48 and price is below 9 EMA
+                          : (rsi > 52 && spot > (ema9 || spot)); // Only exit PE if RSI rises above 52 and price is above 9 EMA
+
+                        if (!isReversalConfirmed) {
+                          console.log(`🛡️ [Trend Guard] Opposite signal ignored. Pullback detected on ${symToScan} but trend reversal not confirmed (RSI: ${rsi.toFixed(1)}, Price vs EMA9). Holding position.`);
+                          return;
+                        }
+
                         // SYNCHRONOUSLY CLEAR STATE BEFORE FETCH TO PREVENT TICK RACE CONDITIONS
                         b.hasSecondPosition = false;
                         const savedEntrySymbol2 = b.entrySymbol2;
@@ -1728,9 +1837,22 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                     }
 
                     // Exit Position 1
+                                        // Exit Position 1
                     if (b.hasPosition) {
                       const activeIndex1 = b.entrySymbol ? b.entrySymbol.split(" ")[0] : "";
                       if (activeIndex1 === symToScan) {
+                        // Algorithm-based reversal confirmation
+                        const isCE = !b.isShort;
+                        const ema9 = activeSymbolData.ema9;
+                        const isReversalConfirmed = isCE
+                          ? (rsi < 48 && spot < (ema9 || spot)) // Only exit CE if RSI drops below 48 and price is below 9 EMA
+                          : (rsi > 52 && spot > (ema9 || spot)); // Only exit PE if RSI rises above 52 and price is above 9 EMA
+
+                        if (!isReversalConfirmed) {
+                          console.log(`🛡️ [Trend Guard] Opposite signal ignored. Pullback detected on ${symToScan} but trend reversal not confirmed (RSI: ${rsi.toFixed(1)}, Price vs EMA9). Holding position.`);
+                          return;
+                        }
+
                         // SYNCHRONOUSLY CLEAR STATE BEFORE FETCH TO PREVENT TICK RACE CONDITIONS
                         b.hasPosition = false;
                         const savedEntrySymbol = b.entrySymbol;
@@ -1877,14 +1999,24 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                 const targetMult = activeSymbolData.targetMultiplier || 1.8;
                 const slMult = activeSymbolData.slMultiplier || 1.2;
 
-                const delta = 0.55;
-                const atrTargetIndexPoints = activeAtr * targetMult;
-                const atrSlIndexPoints = activeAtr * slMult;
-                const atrSlOptionPct = Math.max(6, Math.min(25, (atrSlIndexPoints * delta / premium) * 100));
+                const targetPointsMap: Record<string, number> = { NIFTY50: 22, BANKNIFTY: 52, SENSEX: 45 };
+                const slPointsMap: Record<string, number> = { NIFTY50: 12, BANKNIFTY: 28, SENSEX: 22 };
                 
-                // Keep ratio based target: 1:3 for crossover, 1:2 for gainz
-                const ratioMultiplier = activeStrategy === "gainz" ? 2.0 : 3.0;
-                const atrTargetOptionPct = Math.max(12, Math.min(75, atrSlOptionPct * ratioMultiplier));
+                let targetIdxPoints = targetPointsMap[symToScan] || 22;
+                const slIdxPoints = slPointsMap[symToScan] || 12;
+
+                // If it is a Sure Trade, we increase target points by 1.6x to capture a larger move
+                if (isHighConfidence) {
+                  targetIdxPoints = Math.round(targetIdxPoints * 1.6);
+                }
+
+                const delta = 0.52;
+                const optTargetPoints = targetIdxPoints * delta;
+                const optSlPoints = slIdxPoints * delta;
+
+                const atrSlOptionPct = Math.max(6, Math.min(15, (optSlPoints / premium) * 100));
+                // Cap increased to 55% for Sure Trades instead of 35%
+                const atrTargetOptionPct = Math.max(8, Math.min(isHighConfidence ? 55 : 35, (optTargetPoints / premium) * 100));
 
                 let serverSlPct = activeSymbolData.slPct5ema || 15;
                 let serverTargetPct = activeSymbolData.targetPct5ema || 45;
@@ -1935,16 +2067,17 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                     finalReason = `💸 [LOW RISK NORMAL ENTRY] ${finalReason}`;
                   }
 
-                  setBotNotification({
+                    setBotNotification({
                     id: Date.now().toString(),
                     symbol: sym,
                     type: currentDirection,
                     strike: chosenStrike,
-                    premium,
-                    reason: finalReason,
+                    premium: premium,
+                    reason: isHighConfidence ? `🔥 [SURE TRADE - 99% CONFIDENCE] ${finalReason}` : finalReason,
                     timestamp: new Date(),
                     targetPct: localTargetPct,
-                    slPct: localSlPct
+                    slPct: localSlPct,
+                    isSureTrade: isHighConfidence
                   });
 
                   setBotStatus(`🔔 Signal! ${currentDirection === "CE" ? "📈 BULLISH" : "📉 BEARISH"} - ${sym} @ ₹${premium.toFixed(2)}`);

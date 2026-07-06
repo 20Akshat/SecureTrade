@@ -149,7 +149,7 @@ export default memo(function PositionsPanel({ onShowChart }: { onShowChart?: (sy
     let changed = false;
     const nextLimits = { ...activeLimits };
     Object.keys(activeLimits).forEach(sym => {
-      const hasPos = positions.some(p => p.symbol === sym && Math.abs(p.quantity) > 0);
+      const hasPos = positions.some(p => p.symbol === sym && Math.abs(p.quantity) > 0 && !p.symbol.startsWith("KYC_CFG"));
       if (!hasPos) {
         delete nextLimits[sym];
         delete triggeredSymbolsRef.current[sym];
@@ -437,13 +437,13 @@ export default memo(function PositionsPanel({ onShowChart }: { onShowChart?: (sy
 
               {/* Positions List */}
               <div className="space-y-3.5">
-                {positions.length === 0 ? (
+                {positions.filter(p => !p.symbol.startsWith("KYC_CFG")).length === 0 ? (
                   <div className="text-center py-10">
                     <AlertCircle className="w-10 h-10 text-slate-300 mx-auto mb-2" />
                     <p className="text-slate-400 text-xs font-bold uppercase">No Open Positions</p>
                     <p className="text-[11px] text-slate-400 mt-0.5">Create buy/sell orders in the Options Chain tab.</p>
                   </div>
-                ) : positions.map((pos) => {
+                ) : positions.filter(p => !p.symbol.startsWith("KYC_CFG")).map((pos) => {
                   const ltp = pos.livePrice ?? pos.averagePrice;
                   const pnl = pos.quantity * (ltp - pos.averagePrice);
                   const isProfit = pnl >= 0;
@@ -675,7 +675,7 @@ export default memo(function PositionsPanel({ onShowChart }: { onShowChart?: (sy
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   const lotsToBuy = buyMoreLots[pos.symbol] || 1;
-                                  handleAverageMore(pos, lotsToBuy);
+                                  handleAverageMore(pos, lotsToBuy, pos.livePrice || pos.averagePrice); // Pass real-time LTP!
                                 }}
                                 disabled={tradeLoading === pos.symbol}
                                 className="py-1.5 px-4 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-lg transition-all disabled:opacity-50 text-center uppercase tracking-wide cursor-pointer shadow-xs"
@@ -796,7 +796,7 @@ export default memo(function PositionsPanel({ onShowChart }: { onShowChart?: (sy
                               onClick={() => {
                                 setActiveLimits(prev => ({
                                   ...prev,
-                                  [pos.symbol]: { sl: currentSL, target: currentTarget, qty: currentSellQty }
+                                  [pos.symbol]: { sl: currentSL, target: currentTarget, qty: currentSellQty, targetActive: true }
                                 }));
                                 setNotification({
                                   message: `⚡ SL & Target order placed for ${pos.symbol.replace("NIFTY50", "NIFTY")} (SL: ₹${currentSL.toFixed(2)} | Target: ₹${currentTarget.toFixed(2)})`,
