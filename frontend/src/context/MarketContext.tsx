@@ -1414,7 +1414,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         const isGlobalCooldownActive = (Date.now() - lastResolvedEntryTime.current) < 60000;
 
         // Only scan for signals and show popup alerts when the market is open and bot is active
-        if (isMarketOpen && b.isAutoTradeActive && !isGlobalCooldownActive && !b.waitingForUser && !b.cooldown) {
+        if (isMarketOpen && b.active && !isGlobalCooldownActive && !b.waitingForUser && !b.cooldown) {
           let scanSymbols = b.enabledSymbols || ["NIFTY50", "BANKNIFTY", "SENSEX"];
 
           // 1. Scan for Zero-Hero (if Zero-Hero is enabled and we don't have a ZH position)
