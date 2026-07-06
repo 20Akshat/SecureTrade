@@ -213,6 +213,14 @@ module.exports = {
         writeDb(db);
         return u.is_free_service;
     },
+    setGlitchNotice: (userId, value) => {
+        const db = readDb();
+        const u = db.users[userId];
+        if (!u) return false;
+        u.server_glitch_notice = value;
+        writeDb(db);
+        return true;
+    },
     deleteUserConfig: (userId) => {
         const db = readDb();
         if (db.users[userId]) {

@@ -40,6 +40,7 @@ export default function DashboardPage() {
   const [panFile, setPanFile] = useState<File | null>(null);
   const [verifyError, setVerifyError] = useState("");
   const [verifyLoading, setVerifyLoading] = useState(false);
+  const [showGlitchNotice, setShowGlitchNotice] = useState(false);
 
 
   useEffect(() => {
@@ -82,6 +83,7 @@ export default function DashboardPage() {
     .then(res => res.json())
     .then(data => {
       setDocumentsVerified(data.documents_verified !== false);
+      setShowGlitchNotice(!!data.glitchNotice);
       setCheckingVerified(false);
     })
     .catch(() => {
@@ -889,6 +891,32 @@ export default function DashboardPage() {
         </div>
 
       </div>
+
+      {/* ── SERVER GLITCH WARNING BANNER ── */}
+      {showGlitchNotice && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-base shrink-0">⚠️</span>
+            <p className="text-xs text-amber-800 font-extrabold uppercase tracking-wide leading-relaxed">
+              System Notice: Due to a server cache glitch, a wrong trade/PnL was shown on your dashboard earlier today. Your portfolio trades have been cleared, and your starting balance has been restored to ₹1,00,000.00 for a fresh start. We sincerely apologize for the inconvenience!
+            </p>
+          </div>
+          <button
+            onClick={async () => {
+              setShowGlitchNotice(false);
+              try {
+                await fetch("https://securetrade-n3qh.onrender.com/api/dismiss-glitch-notice", {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${token}` }
+                });
+              } catch (e) {}
+            }}
+            className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs border-0"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* ── MARKET CLOSED NOTIFICATION BANNER ── */}
       {!isMarketOpen && (

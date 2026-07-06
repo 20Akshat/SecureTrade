@@ -1590,17 +1590,29 @@ app.get('/api/balance', authMiddleware, async (req, res) => {
 
         const phone = userConfig ? userConfig.phone : "";
         const isAdmin = email && email.toLowerCase() === "akshatmarwadi5@gmail.com";
+        const glitchNotice = userConfig ? !!userConfig.server_glitch_notice : false;
 
         res.status(200).json({ 
             balance,
             email,
             phone,
             documents_verified: isVerified || isAdmin, // Admin Akshat is exempted!
-            isAdmin
+            isAdmin,
+            glitchNotice
         });
     } catch (err) {
         console.error("Error fetching balance:", err);
         res.status(500).json({ error: "Failed to fetch balance" });
+    }
+});
+
+// DISMISS SERVER GLITCH NOTICE
+app.post('/api/dismiss-glitch-notice', authMiddleware, (req, res) => {
+    try {
+        localDb.setGlitchNotice(req.user.userId, false);
+        res.status(200).json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to dismiss notice" });
     }
 });
 
