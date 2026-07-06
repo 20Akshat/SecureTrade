@@ -35,14 +35,16 @@ export default function BotNotificationPopup() {
       if (botNotification.action === "SQUARE_OFF") {
         setLots(botNotification.lots || 1);
       } else {
+        const indexName = Object.keys(LOT_SIZES).find(k => botNotification.symbol.includes(k)) || "NIFTY50";
+        const lotSize = LOT_SIZES[indexName];
+        const lotCost = botNotification.premium * lotSize;
         if (isZeroHeroActive) {
-          const indexName = Object.keys(LOT_SIZES).find(k => botNotification.symbol.includes(k)) || "NIFTY50";
-          const lotSize = LOT_SIZES[indexName];
-          const lotCost = botNotification.premium * lotSize;
           const heroLots = lotCost > 0 ? Math.max(1, Math.floor(1500 / lotCost)) : 1;
           setLots(heroLots);
         } else {
-          setLots(botMaxLots);
+          // Regular trade or averaging: dynamically target ₹15,000 capital value
+          const targetLots = lotCost > 0 ? Math.max(1, Math.floor(15000 / lotCost)) : 1;
+          setLots(targetLots);
         }
       }
     }
@@ -62,7 +64,6 @@ export default function BotNotificationPopup() {
   const lotSize = LOT_SIZES[indexName];
   const totalShares = lots * lotSize;
   const totalCost = botNotification.premium * totalShares;
-  const balance10Percent = balance * 0.10;
   const lotCost = botNotification.premium * lotSize;
   const targetPct = botNotification.targetPct || (botNotification.symbol.includes("BANKNIFTY") ? 12 : 20);
   const slPct = botNotification.slPct || (botNotification.symbol.includes("BANKNIFTY") ? 10 : 15);
@@ -71,7 +72,7 @@ export default function BotNotificationPopup() {
   if (isZeroHeroActive) {
     suggestedLots = lotCost > 0 ? Math.max(1, Math.floor(1500 / lotCost)) : 1;
   } else {
-    suggestedLots = lotCost > 0 ? Math.max(1, Math.floor(balance10Percent / lotCost)) : 1;
+    suggestedLots = lotCost > 0 ? Math.max(1, Math.floor(15000 / lotCost)) : 1;
   }
 
   const handleConfirm = async () => {

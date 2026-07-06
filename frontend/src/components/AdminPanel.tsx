@@ -12,6 +12,7 @@ interface AdminUser {
   createdAt: string;
   is_blocked?: boolean;
   is_free_service?: boolean;
+  todayProfit: number;
 }
 
 interface SupportRequest {
@@ -262,16 +263,17 @@ export default function AdminPanel({ token }: { token: string }) {
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-200 text-[10px] text-slate-450 font-bold uppercase tracking-wider">
                 <th className="py-3 px-4">User Email</th>
-                <th className="py-3 px-4">Phone Number</th>
+                <th className="py-3 px-4">Phone</th>
                 <th className="py-3 px-4">Verification ID / Code</th>
                 <th className="py-3 px-4 text-right">Paper Balance</th>
+                <th className="py-3 px-4 text-right">Today's Profit</th>
                 <th className="py-3 px-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-400 font-bold uppercase">
+                  <td colSpan={6} className="py-8 text-center text-slate-400 font-bold uppercase">
                     {loading ? "Loading registered accounts..." : "No users registered yet."}
                   </td>
                 </tr>
@@ -297,6 +299,12 @@ export default function AdminPanel({ token }: { token: string }) {
                     <td className="py-3.5 px-4 font-mono uppercase text-slate-500">{user.angelClientCode}</td>
                     <td className="py-3.5 px-4 text-right font-mono font-black text-slate-800">
                       ₹{user.balance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className={`py-3.5 px-4 text-right font-mono font-black ${
+                      user.todayProfit > 0 ? "text-green-600" :
+                      user.todayProfit < 0 ? "text-red-500" : "text-slate-450"
+                    }`}>
+                      {user.todayProfit > 0 ? "+" : ""}₹{user.todayProfit.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                     </td>
                     <td className="py-3.5 px-4 flex items-center justify-center gap-3">
                       {user.is_blocked && (

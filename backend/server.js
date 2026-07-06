@@ -880,7 +880,8 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
                 createdAt: u.created_at,
                 phone: config.phone || "Not Set",
                 angelClientCode: `${clientVal}${typeLabel}`,
-                is_free_service: !!config.is_free_service
+                is_free_service: !!config.is_free_service,
+                todayProfit: config.today_total_profit || 0
             };
         });
 

@@ -372,10 +372,12 @@ module.exports = {
         const todayStr = new Date().toISOString().split('T')[0];
         if (u.last_profit_date !== todayStr) {
             u.daily_profit_accumulated = 0;
+            u.today_total_profit = 0;
             u.last_profit_date = todayStr;
         }
         
         u.daily_profit_accumulated = (u.daily_profit_accumulated || 0) + profit;
+        u.today_total_profit = (u.today_total_profit || 0) + profit;
         
         // Skip commission logic for monthly plan users
         if (u.plan_type === 'monthly') {
