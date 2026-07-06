@@ -361,13 +361,6 @@ module.exports = {
         const createdTime = new Date(u.created_at || Date.now()).getTime();
         const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
         const isTrialActive = (Date.now() - createdTime) < threeDaysMs;
-        if (isAdmin || isTrialActive) {
-            writeDb(db);
-            return {
-                dailyProfit: 0,
-                unpaidInvoice: 0
-            };
-        }
         
         const todayStr = new Date().toISOString().split('T')[0];
         if (u.last_profit_date !== todayStr) {
@@ -379,11 +372,11 @@ module.exports = {
         u.daily_profit_accumulated = (u.daily_profit_accumulated || 0) + profit;
         u.today_total_profit = (u.today_total_profit || 0) + profit;
         
-        // Skip commission logic for monthly plan users
-        if (u.plan_type === 'monthly') {
+        // Skip commission logic for Admin, Trial users, Free service users, and Monthly plan users
+        if (isAdmin || isTrialActive || u.plan_type === 'monthly' || u.is_free_service) {
             writeDb(db);
             return {
-                dailyProfit: u.daily_profit_accumulated,
+                dailyProfit: u.today_total_profit,
                 unpaidInvoice: 0
             };
         }
@@ -398,7 +391,7 @@ module.exports = {
         
         writeDb(db);
         return {
-            dailyProfit: u.daily_profit_accumulated,
+            dailyProfit: u.today_total_profit,
             unpaidInvoice: u.unpaid_commission_invoice || 0
         };
     },
