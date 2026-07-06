@@ -2184,6 +2184,35 @@ app.post('/api/option-ltp', async (req, res) => {
     }
 });
 
+// ADMIN: Clear trades cache for specific user IDs (used after direct DB edits)
+app.post('/api/admin/clear-trades-cache', async (req, res) => {
+    try {
+        const { secret, userIds } = req.body;
+        if (secret !== process.env.ANGEL_API_KEY) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+        const cleared = [];
+        if (Array.isArray(userIds)) {
+            userIds.forEach(uid => {
+                if (userTradesCache[uid]) {
+                    delete userTradesCache[uid];
+                    cleared.push(uid);
+                }
+            });
+        } else {
+            // Clear all if no specific users given
+            Object.keys(userTradesCache).forEach(uid => {
+                delete userTradesCache[uid];
+                cleared.push(uid);
+            });
+        }
+        console.log(`🧹 [Admin] Cleared trades cache for ${cleared.length} user(s)`);
+        res.json({ success: true, cleared });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET TODAY'S TRADES
 app.get('/api/trades', authMiddleware, async (req, res) => {
     try {
