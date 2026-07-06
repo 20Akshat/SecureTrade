@@ -1063,6 +1063,18 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                 currentPremium = lastOptionPremium.current || t.entryPrice;
               }
 
+              // 🛡️ GLITCH GUARD: 10-second grace period after entry
+              const msSinceEntry = Date.now() - t.entryTime;
+              if (msSinceEntry < 10000) {
+                continue; // Don't check target/SL in the first 10 seconds after entry
+              }
+
+              // 🛡️ GLITCH GUARD: Sanity check - reject impossible price spikes
+              if (currentPremium > t.entryPrice * 2.5 || currentPremium < t.entryPrice * 0.25) {
+                console.warn(`🚨 [Glitch Guard] Suspicious price ₹${currentPremium.toFixed(2)} rejected for ${t.symbol} (entry ₹${t.entryPrice.toFixed(2)}). Skipping target/SL check.`);
+                continue;
+              }
+
               if (currentPremium) {
                 // Update peak premium and PnL for Trailing Stop Loss
                 if (t.id === 1) {
@@ -1321,6 +1333,16 @@ export function MarketProvider({ children }: { children: ReactNode }) {
 
               if (!gotRealPrice) {
                 currentPremium = lastZhOptionPremium.current || b.zhEntryPrice;
+              }
+
+              // 🛡️ GLITCH GUARD: 10-second grace period after ZH entry
+              const zhMsSinceEntry = Date.now() - b.zhEntryTime;
+              if (zhMsSinceEntry < 10000) return;
+
+              // 🛡️ GLITCH GUARD: Sanity check - reject impossible price spikes for ZH
+              if (currentPremium > b.zhEntryPrice * 3.0 || currentPremium < b.zhEntryPrice * 0.1) {
+                console.warn(`🚨 [ZH Glitch Guard] Suspicious price ₹${currentPremium.toFixed(2)} rejected for ${b.zhEntrySymbol} (entry ₹${b.zhEntryPrice.toFixed(2)}). Skipping ZH target/SL check.`);
+                return;
               }
 
               if (currentPremium) {
@@ -1650,7 +1672,10 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                           });
                           if (ltpRes2.ok) {
                             const ltpData2 = await ltpRes2.json();
-                            if (ltpData2.ltp && ltpData2.ltp > 0) exitPremium2 = ltpData2.ltp;
+                            // 🛡️ GLITCH GUARD: Only use price if it's within sane range
+                            if (ltpData2.ltp && ltpData2.ltp > 0 && ltpData2.ltp < b.entryPrice2 * 2.5 && ltpData2.ltp > b.entryPrice2 * 0.25) {
+                              exitPremium2 = ltpData2.ltp;
+                            }
                           }
 
                           const totalShares2 = b.maxLots2 * configForExit2.lotSize;
@@ -1701,7 +1726,10 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                       });
                       if (ltpRes.ok) {
                         const ltpData = await ltpRes.json();
-                        if (ltpData.ltp && ltpData.ltp > 0) exitPremium = ltpData.ltp;
+                        // 🛡️ GLITCH GUARD: Only use price if it's within sane range
+                        if (ltpData.ltp && ltpData.ltp > 0 && ltpData.ltp < b.entryPrice * 2.5 && ltpData.ltp > b.entryPrice * 0.25) {
+                          exitPremium = ltpData.ltp;
+                        }
                       }
 
                       const totalShares = b.maxLots * configForExit.lotSize;
