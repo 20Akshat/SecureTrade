@@ -7,3 +7,4 @@ dist/
 backend/local_db.json
 local_db.json
 .gemini/
+backend/OpenAPIScripMaster.json

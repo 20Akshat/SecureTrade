@@ -155,30 +155,81 @@ const activeTradesQueries = {};
 // Load & Index Angel One Scrip Master
 const scripMap = {};
 const scripMasterPath = require('path').join(__dirname, 'OpenAPIScripMaster.json');
-console.log("⏳ Loading and indexing OpenAPIScripMaster.json...");
-if (require('fs').existsSync(scripMasterPath)) {
-    try {
-        const scrips = JSON.parse(require('fs').readFileSync(scripMasterPath, 'utf8'));
-        scrips.forEach(s => {
-            if (s.instrumenttype === 'OPTIDX' && (s.name === 'NIFTY' || s.name === 'BANKNIFTY' || s.name === 'SENSEX')) {
-                const strikeVal = Math.round(parseFloat(s.strike) / 100);
-                const optionType = s.symbol.endsWith('CE') ? 'CE' : 'PE';
-                const key = `${s.name}_${s.expiry}_${strikeVal}_${optionType}`;
-                scripMap[key] = {
-                    token: s.token,
-                    symbol: s.symbol,
-                    exch_seg: s.exch_seg,
-                    lotsize: Number(s.lotsize)
-                };
+
+async function loadAndIndexScripMaster() {
+    let shouldDownload = false;
+    const fs = require('fs');
+    if (!fs.existsSync(scripMasterPath)) {
+        shouldDownload = true;
+    } else {
+        try {
+            const stats = fs.statSync(scripMasterPath);
+            const ageInHours = (Date.now() - stats.mtimeMs) / (1000 * 60 * 60);
+            if (ageInHours > 24 || stats.size < 1024 * 1024) {
+                shouldDownload = true;
             }
-        });
-        console.log(`✅ Indexed ${Object.keys(scripMap).length} option contracts successfully!`);
-    } catch (err) {
-        console.error("❌ Failed to parse OpenAPIScripMaster.json:", err.message);
+        } catch {
+            shouldDownload = true;
+        }
     }
-} else {
-    console.error("❌ OpenAPIScripMaster.json not found in backend directory!");
+
+    if (shouldDownload) {
+        console.log("⏳ Scrip master is missing or older than 24 hours. Downloading latest version from Angel One...");
+        try {
+            await new Promise((resolve, reject) => {
+                const https = require('https');
+                const file = fs.createWriteStream(scripMasterPath);
+                https.get('https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json', (response) => {
+                    if (response.statusCode !== 200) {
+                        return reject(new Error(`HTTP ${response.statusCode}`));
+                    }
+                    response.pipe(file);
+                    file.on('finish', () => {
+                        file.close();
+                        resolve();
+                    });
+                }).on('error', (err) => {
+                    fs.unlink(scripMasterPath, () => {});
+                    reject(err);
+                });
+            });
+            console.log("🎉 Latest Scrip master downloaded successfully!");
+        } catch (err) {
+            console.error("⚠️ Failed to download latest scrip master, attempting to use cached local version:", err.message);
+        }
+    }
+
+    if (fs.existsSync(scripMasterPath)) {
+        console.log("⏳ Indexing option contracts from OpenAPIScripMaster.json...");
+        try {
+            const scrips = JSON.parse(fs.readFileSync(scripMasterPath, 'utf8'));
+            let count = 0;
+            scrips.forEach(s => {
+                if (s.instrumenttype === 'OPTIDX' && (s.name === 'NIFTY' || s.name === 'BANKNIFTY' || s.name === 'SENSEX')) {
+                    const strikeVal = Math.round(parseFloat(s.strike) / 100);
+                    const optionType = s.symbol.endsWith('CE') ? 'CE' : 'PE';
+                    const key = `${s.name}_${s.expiry}_${strikeVal}_${optionType}`;
+                    scripMap[key] = {
+                        token: s.token,
+                        symbol: s.symbol,
+                        exch_seg: s.exch_seg,
+                        lotsize: Number(s.lotsize)
+                    };
+                    count++;
+                }
+            });
+            console.log(`✅ Indexed ${count} option contracts successfully!`);
+        } catch (err) {
+            console.error("❌ Failed to parse OpenAPIScripMaster.json:", err.message);
+        }
+    } else {
+        console.error("❌ OpenAPIScripMaster.json not found in backend directory!");
+    }
 }
+
+// Start download and indexing on startup
+loadAndIndexScripMaster();
+
 
 app.use(helmet());
 app.use(cors({
@@ -3293,10 +3344,10 @@ function generateSignal(rsi, prices, symbol) {
     
     // 2. Trend-Following Crosses (Optimized RSI bounds for early entry)
     if (!isFlatMarket) {
-        if (isBullishTrend && rsi >= 46 && isFreshBullishCross) {
+        if (isBullishTrend && rsi >= 40 && isFreshBullishCross) {
             return "BUY (Bullish Trend Cross)";
         }
-        if (isBearishTrend && rsi <= 54 && isFreshBearishCross) {
+        if (isBearishTrend && rsi <= 60 && isFreshBearishCross) {
             return "SELL (Bearish Trend Cross)";
         }
     }
@@ -3868,10 +3919,11 @@ function parseDteFromSymbol(symbol) {
     };
     
     const month = months[monthStr.toUpperCase()] || 0;
-    const expiryDate = new Date(parseInt(year), month, parseInt(day), 15, 30, 0);
-    
+    const expiryMidnight = new Date(parseInt(year), month, parseInt(day));
     const today = new Date();
-    const diffTime = expiryDate.getTime() - today.getTime();
+    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    
+    const diffTime = expiryMidnight.getTime() - todayMidnight.getTime();
     const dte = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return Math.max(1, dte);
 }

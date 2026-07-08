@@ -200,6 +200,8 @@ Humne pichle 2-3 dino me aur aaj ke session me niche likhe DSA questions success
 6. **Trapping Rain Water (LeetCode 42)** - Prefix/Suffix Max Boundaries [Two Pointers]
 7. **Largest Rectangle in Histogram (LeetCode 84)** - Next/Prev Smaller boundaries [Monotonic Stack]
 8. **Sliding Window Maximum (LeetCode 239)** - Monotonic Deque [Sliding Window]
+9. **Single Element in a Sorted Array (LeetCode 540)** - Parity check [Binary Search]
+10. **Super Ugly Number (LeetCode 313)** - Multi-Pointer DP [Dynamic Programming]
 
 *(Naye questions jaise hi hum solve karenge, is list me add hote jayenge!)*
 

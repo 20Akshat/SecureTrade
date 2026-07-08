@@ -57,9 +57,11 @@ function parseDteFromSymbol(symbol: string): number {
   const expiryDate = new Date(dateStr);
   if (isNaN(expiryDate.getTime())) return 1;
   
-  expiryDate.setHours(15, 30, 0, 0);
+  const expiryMidnight = new Date(expiryDate.getFullYear(), expiryDate.getMonth(), expiryDate.getDate());
   const today = new Date();
-  const diffTime = expiryDate.getTime() - today.getTime();
+  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  
+  const diffTime = expiryMidnight.getTime() - todayMidnight.getTime();
   const dte = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   return Math.max(1, dte);
 }
@@ -256,7 +258,8 @@ function generateHistoricalData(symbol: string, currentPrice: number, candleInte
     }
   ] : [];
 
-  return { candleData, ma5Data, ma20Data, resistance, support, markers };
+  const todayStartTimestamp = todayStartTime + shift;
+  return { candleData, ma5Data, ma20Data, resistance, support, markers, todayStartTimestamp };
 }
 
 export default function TradingChart({ customSymbol, onMarketUpdate }: TradingChartProps) {
@@ -557,11 +560,6 @@ export default function TradingChart({ customSymbol, onMarketUpdate }: TradingCh
       
       const { candleData, ma5Data, ma20Data, resistance, support, markers, isMock } = chartData;
 
-      candleSeriesRef.current.setData(candleData);
-      if (mainLineSeriesRef.current) {
-        mainLineSeriesRef.current.setData(candleData.map((c: any) => ({ time: c.time, value: c.close })));
-      }
-
       let finalMa5 = ma5Data;
       let finalMa20 = ma20Data;
       let finalResistance = resistance;
@@ -646,8 +644,28 @@ export default function TradingChart({ customSymbol, onMarketUpdate }: TradingCh
         }
       }
 
-      if (ma5SeriesRef.current) ma5SeriesRef.current.setData(finalMa5);
-      if (ma20SeriesRef.current) ma20SeriesRef.current.setData(finalMa20);
+      const isIntraday = chartData.range === "Y";
+      const todayStartTimestamp = chartData.todayStartTimestamp;
+
+      const displayCandleData = (isIntraday && todayStartTimestamp)
+        ? candleData.filter((c: any) => c.time >= todayStartTimestamp)
+        : candleData;
+
+      const displayMa5 = (isIntraday && todayStartTimestamp)
+        ? finalMa5.filter((m: any) => m.time >= todayStartTimestamp)
+        : finalMa5;
+
+      const displayMa20 = (isIntraday && todayStartTimestamp)
+        ? finalMa20.filter((m: any) => m.time >= todayStartTimestamp)
+        : finalMa20;
+
+      candleSeriesRef.current.setData(displayCandleData);
+      if (mainLineSeriesRef.current) {
+        mainLineSeriesRef.current.setData(displayCandleData.map((c: any) => ({ time: c.time, value: c.close })));
+      }
+
+      if (ma5SeriesRef.current) ma5SeriesRef.current.setData(displayMa5);
+      if (ma20SeriesRef.current) ma20SeriesRef.current.setData(displayMa20);
 
       if (resLineRef.current) candleSeriesRef.current.removePriceLine(resLineRef.current);
       if (supLineRef.current) candleSeriesRef.current.removePriceLine(supLineRef.current);

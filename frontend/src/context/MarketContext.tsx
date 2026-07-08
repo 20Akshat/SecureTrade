@@ -98,9 +98,11 @@ function parseDteFromSymbol(symbol: string): number {
   const expiryDate = new Date(dateStr);
   if (isNaN(expiryDate.getTime())) return 1;
   
-  expiryDate.setHours(15, 30, 0, 0);
+  const expiryMidnight = new Date(expiryDate.getFullYear(), expiryDate.getMonth(), expiryDate.getDate());
   const today = new Date();
-  const diffTime = expiryDate.getTime() - today.getTime();
+  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  
+  const diffTime = expiryMidnight.getTime() - todayMidnight.getTime();
   const dte = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   return Math.max(1, dte);
 }
