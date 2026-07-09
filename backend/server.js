@@ -266,6 +266,18 @@ app.get('/api/debug/test-email', async (req, res) => {
     }
 });
 
+// DEBUG SCRIP KEYS ENDPOINT
+app.get('/api/debug/scrip-keys', (req, res) => {
+    const keys = Object.keys(scripMap);
+    res.json({
+        total: keys.length,
+        nifty: keys.filter(k => k.startsWith('NIFTY_')).slice(0, 10),
+        banknifty: keys.filter(k => k.startsWith('BANKNIFTY_')).slice(0, 10),
+        sensex: keys.filter(k => k.startsWith('SENSEX_')).slice(0, 10),
+    });
+});
+
+
 const { validateEmail, validatePhone } = require('./utils/validators');
 
 // REQUEST OTP FOR EXISTING USER (Login verification)
