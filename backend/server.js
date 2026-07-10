@@ -230,6 +230,12 @@ async function loadAndIndexScripMaster() {
 // Start download and indexing on startup
 loadAndIndexScripMaster();
 
+// Check file age and update scrip master every 1 hour in the background
+setInterval(() => {
+    console.log("⏳ Running periodic background age check for OpenAPIScripMaster.json...");
+    loadAndIndexScripMaster();
+}, 60 * 60 * 1000);
+
 
 app.use(helmet());
 app.use(cors({
@@ -1289,24 +1295,39 @@ app.post('/api/buy', authMiddleware, async (req, res) => {
                 executionPrice = await getLivePriceForSymbol(symbol, true);
             } catch (priceErr) {
                 console.error(`❌ [API BUY] Price fetch error: ${priceErr.message}`);
-                // Last resort fallback: Black-Scholes calculation
-                try {
-                    const parsed = parseOptionSymbol(symbol);
-                    if (parsed) {
-                        const spotSymbol = parsed.scripName === 'NIFTY' ? 'NIFTY50' : parsed.scripName;
-                        const spot = marketState[spotSymbol]?.currentPrice || marketState[spotSymbol]?.realPrice || 24500;
-                        const isCall = parsed.type === "CE";
-                        const strike = parseFloat(parsed.strike);
-                        const dte = parseDteFromSymbol(symbol);
-                        const iv = parsed.scripName === "BANKNIFTY" ? 0.16 : 0.13;
-                        executionPrice = runBlackScholes(spot, strike, dte, isCall, iv);
-                        console.log(`⚠️ [API BUY] Fallback: Computed Black-Scholes price: ₹${executionPrice}`);
+                
+                // Try to get last cached real market price first
+                const parsed = parseOptionSymbol(symbol);
+                if (parsed) {
+                    const dateStr = parsed.expiry.toUpperCase().replace(/\s+/g, '');
+                    const key = `${parsed.scripName}_${dateStr}_${parsed.strike}_${parsed.type}`;
+                    const item = scripMap[key];
+                    if (item && optionQuotesCache[item.token]) {
+                        executionPrice = optionQuotesCache[item.token].price;
+                        console.log(`♻️ [API BUY] Fallback: Using cached real market price: ₹${executionPrice}`);
                     }
-                } catch (calcErr) {
-                    console.error(`❌ Fallback Black-Scholes calculation failed: ${calcErr.message}`);
                 }
+                
+                // Only allow Black-Scholes calculation when the market is closed!
+                if (!executionPrice && !checkIsMarketOpen()) {
+                    try {
+                        if (parsed) {
+                            const spotSymbol = parsed.scripName === 'NIFTY' ? 'NIFTY50' : parsed.scripName;
+                            const spot = marketState[spotSymbol]?.currentPrice || marketState[spotSymbol]?.realPrice || 24500;
+                            const isCall = parsed.type === "CE";
+                            const strike = parseFloat(parsed.strike);
+                            const dte = parseDteFromSymbol(symbol);
+                            const iv = parsed.scripName === "BANKNIFTY" ? 0.16 : 0.13;
+                            executionPrice = runBlackScholes(spot, strike, dte, isCall, iv);
+                            console.log(`⚠️ [API BUY] Fallback: Computed Black-Scholes price: ₹${executionPrice}`);
+                        }
+                    } catch (calcErr) {
+                        console.error(`❌ Fallback Black-Scholes calculation failed: ${calcErr.message}`);
+                    }
+                }
+                
                 if (!executionPrice) {
-                    executionPrice = 100;
+                    return res.status(503).json({ error: "Live market price is currently unavailable and no cache exists. Please try again." });
                 }
             }
         }
@@ -1411,24 +1432,39 @@ app.post('/api/sell', authMiddleware, async (req, res) => {
                 executionPrice = await getLivePriceForSymbol(symbol, true);
             } catch (priceErr) {
                 console.error(`❌ [API SELL] Price fetch error: ${priceErr.message}`);
-                // Last resort fallback: Black-Scholes calculation
-                try {
-                    const parsed = parseOptionSymbol(symbol);
-                    if (parsed) {
-                        const spotSymbol = parsed.scripName === 'NIFTY' ? 'NIFTY50' : parsed.scripName;
-                        const spot = marketState[spotSymbol]?.currentPrice || marketState[spotSymbol]?.realPrice || 24500;
-                        const isCall = parsed.type === "CE";
-                        const strike = parseFloat(parsed.strike);
-                        const dte = parseDteFromSymbol(symbol);
-                        const iv = parsed.scripName === "BANKNIFTY" ? 0.16 : 0.13;
-                        executionPrice = runBlackScholes(spot, strike, dte, isCall, iv);
-                        console.log(`⚠️ [API SELL] Fallback: Computed Black-Scholes price: ₹${executionPrice}`);
+                
+                // Try to get last cached real market price first
+                const parsed = parseOptionSymbol(symbol);
+                if (parsed) {
+                    const dateStr = parsed.expiry.toUpperCase().replace(/\s+/g, '');
+                    const key = `${parsed.scripName}_${dateStr}_${parsed.strike}_${parsed.type}`;
+                    const item = scripMap[key];
+                    if (item && optionQuotesCache[item.token]) {
+                        executionPrice = optionQuotesCache[item.token].price;
+                        console.log(`♻️ [API SELL] Fallback: Using cached real market price: ₹${executionPrice}`);
                     }
-                } catch (calcErr) {
-                    console.error(`❌ Fallback Black-Scholes calculation failed: ${calcErr.message}`);
                 }
+                
+                // Only allow Black-Scholes calculation when the market is closed!
+                if (!executionPrice && !checkIsMarketOpen()) {
+                    try {
+                        if (parsed) {
+                            const spotSymbol = parsed.scripName === 'NIFTY' ? 'NIFTY50' : parsed.scripName;
+                            const spot = marketState[spotSymbol]?.currentPrice || marketState[spotSymbol]?.realPrice || 24500;
+                            const isCall = parsed.type === "CE";
+                            const strike = parseFloat(parsed.strike);
+                            const dte = parseDteFromSymbol(symbol);
+                            const iv = parsed.scripName === "BANKNIFTY" ? 0.16 : 0.13;
+                            executionPrice = runBlackScholes(spot, strike, dte, isCall, iv);
+                            console.log(`⚠️ [API SELL] Fallback: Computed Black-Scholes price: ₹${executionPrice}`);
+                        }
+                    } catch (calcErr) {
+                        console.error(`❌ Fallback Black-Scholes calculation failed: ${calcErr.message}`);
+                    }
+                }
+                
                 if (!executionPrice) {
-                    executionPrice = 100;
+                    return res.status(503).json({ error: "Live market price is currently unavailable and no cache exists. Please try again." });
                 }
             }
         }

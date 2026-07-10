@@ -1221,11 +1221,14 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                 let targetHit = false;
                 let slHit = false;
 
-                // Stop Loss is ALWAYS active to protect capital
-                if (userSlPrice && userSlPrice > 0) {
-                  slHit = currentPremium <= userSlPrice;
+                // Stop Loss Exit Logic:
+                if (userSlPrice !== null) {
+                  // If limits exist, only trigger if user's SL is > 0 and price touches it
+                  slHit = userSlPrice > 0 && currentPremium <= userSlPrice;
                 } else {
-                  slHit = pnlPercent <= -maxSl;
+                  // If no limits exist, only apply default strategy SL if it is a bot-entered trade
+                  const isBotTrade = t.symbol === b.entrySymbol || t.symbol === b.entrySymbol2;
+                  slHit = isBotTrade && pnlPercent <= -maxSl;
                 }
 
                 // Target Exit Logic:
@@ -1236,11 +1239,11 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                   
                   const isTargetActive = limit ? !!limit.targetActive : false;
                   
-                  if (userTargetPrice && userTargetPrice > 0) {
-                    if (isTargetActive) {
+                  if (userTargetPrice !== null) {
+                    if (userTargetPrice > 0 && isTargetActive) {
                       // Target is active (either user confirmed or 2 minutes passed)
                       targetHit = currentPremium >= userTargetPrice;
-                    } else {
+                    } else if (userTargetPrice > 0 && !isTargetActive) {
                       // Target is suggested but not active yet.
                       if (elapsedSeconds >= 120) {
                         // 2 minutes passed! Auto-activate it now if premium is still below target
@@ -1251,13 +1254,18 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                         }
                       }
                       targetHit = false; // Profit is allowed to run for now
+                    } else {
+                      // If userTargetPrice is 0 or negative, target is disabled!
+                      targetHit = false;
                     }
                   } else {
-                    // Fallback to default target percent check if no limit object exists
-                    targetHit = pnlPercent >= maxTarget;
+                    // Fallback to default target percent check ONLY if it is a bot-entered trade
+                    const isBotTrade = t.symbol === b.entrySymbol || t.symbol === b.entrySymbol2;
+                    targetHit = isBotTrade && pnlPercent >= maxTarget;
                   }
                 } catch {
-                  targetHit = pnlPercent >= maxTarget;
+                  const isBotTrade = t.symbol === b.entrySymbol || t.symbol === b.entrySymbol2;
+                  targetHit = isBotTrade && pnlPercent >= maxTarget;
                 }
 
                 if (targetHit || slHit) {
@@ -1780,6 +1788,19 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                           return;
                         }
 
+                        // Skip trend reversal early exit if user has set custom limits, but trigger alerts!
+                        try {
+                          const storedLimits = localStorage.getItem("st_active_limits");
+                          const limits = storedLimits ? JSON.parse(storedLimits) : {};
+                          if (limits[b.entrySymbol2]) {
+                            console.log(`🛡️ [Trend Guard] Custom limits active for ${b.entrySymbol2}. Bypassing early exit, but sending notification.`);
+                            setBotStatus(`🔄 Reversal Alert: Opposite trend detected on ${symToScan}! Consider manual square-off.`);
+                            showBrowserNotification("SecureTrade: Reversal Alert! 🔄", `Opposite trend detected on ${symToScan}. Custom limits remain active.`);
+                            playVoiceAlert("Trend reversal warning!");
+                            return;
+                          }
+                        } catch {}
+
                         // SYNCHRONOUSLY CLEAR STATE BEFORE FETCH TO PREVENT TICK RACE CONDITIONS
                         b.hasSecondPosition = false;
                         const savedEntrySymbol2 = b.entrySymbol2;
@@ -1854,6 +1875,19 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                           console.log(`🛡️ [Trend Guard] Opposite signal ignored. Pullback detected on ${symToScan} but trend reversal not confirmed (RSI: ${rsi.toFixed(1)}, Price vs EMA9). Holding position.`);
                           return;
                         }
+
+                        // Skip trend reversal early exit if user has set custom limits, but trigger alerts!
+                        try {
+                          const storedLimits = localStorage.getItem("st_active_limits");
+                          const limits = storedLimits ? JSON.parse(storedLimits) : {};
+                          if (limits[b.entrySymbol]) {
+                            console.log(`🛡️ [Trend Guard] Custom limits active for ${b.entrySymbol}. Bypassing early exit, but sending notification.`);
+                            setBotStatus(`🔄 Reversal Alert: Opposite trend detected on ${symToScan}! Consider manual square-off.`);
+                            showBrowserNotification("SecureTrade: Reversal Alert! 🔄", `Opposite trend detected on ${symToScan}. Custom limits remain active.`);
+                            playVoiceAlert("Trend reversal warning!");
+                            return;
+                          }
+                        } catch {}
 
                         // SYNCHRONOUSLY CLEAR STATE BEFORE FETCH TO PREVENT TICK RACE CONDITIONS
                         b.hasPosition = false;
@@ -2034,14 +2068,23 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                   ? serverTargetPct
                   : (b.targetMode === "probability" ? atrTargetOptionPct : (symToScan === "BANKNIFTY" ? 25 : 20));
                 
-                let localSlPct = activeStrategy === "5ema"
+                let localSlPct = activeStrategy === "5ema"  
                   ? serverSlPct
                   : (b.targetMode === "probability" ? atrSlOptionPct : (symToScan === "BANKNIFTY" ? 15 : 15));
 
                 const isReEntry = b.lastTradedSymbol === getIndexAndDirection(sym) && (Date.now() - b.lastExitTime) < 180000;
                 const minCost = premium * config.lotSize;
 
-                const isSecondPosAllowed = !b.hasPosition || (canOpenSecondPos && currentDirection === (b.isShort ? "PE" : "CE"));
+                // Check if there is already an active position for this index
+                const hasPositionOnThisIndex = (b.hasPosition && b.entrySymbol.startsWith(symToScan)) ||
+                                               (b.hasSecondPosition && b.entrySymbol2.startsWith(symToScan));
+                
+                // Get active normal positions count
+                const activeNormalCount = (b.hasPosition ? 1 : 0) + (b.hasSecondPosition ? 1 : 0);
+
+                const isSecondPosAllowed = (!hasPositionOnThisIndex && activeNormalCount < 2) || 
+                                           (hasPositionOnThisIndex && !b.hasSecondPosition && (Date.now() - b.entryTime > 15 * 60 * 1000) && currentDirection === (b.isShort ? "PE" : "CE"));
+
                 if (!isReEntry && balanceRef.current >= minCost && isSecondPosAllowed) {
                   gotNormal = true;
                   normalSignalFound = true;

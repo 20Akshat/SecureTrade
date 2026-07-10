@@ -287,21 +287,21 @@ export default memo(function PositionsPanel({ onShowChart }: { onShowChart?: (sy
       let triggerPrice = ltp;
 
       if (isLong) {
-        if (ltp <= limit.sl) {
+        if (limit.sl > 0 && ltp <= limit.sl) {
           triggered = true;
           reason = "Stop Loss";
           triggerPrice = limit.sl;
-        } else if (ltp >= limit.target) {
+        } else if (limit.target > 0 && ltp >= limit.target) {
           triggered = true;
           reason = "Target";
           triggerPrice = limit.target;
         }
       } else {
-        if (ltp >= limit.sl) {
+        if (limit.sl > 0 && ltp >= limit.sl) {
           triggered = true;
           reason = "Stop Loss";
           triggerPrice = limit.sl;
-        } else if (ltp <= limit.target) {
+        } else if (limit.target > 0 && ltp <= limit.target) {
           triggered = true;
           reason = "Target";
           triggerPrice = limit.target;
