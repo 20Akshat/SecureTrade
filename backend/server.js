@@ -3845,10 +3845,28 @@ const globalUpdateInterval = setInterval(async () => {
                 const ema3 = ema3Arr[ema3Arr.length - 1];
                 const ema9 = ema9Arr[ema9Arr.length - 1];
                 
-                if (price > curState.firstCandle1mHigh && ema3 > ema9) {
-                    signalMorning = "BUY (Morning ORB)";
-                } else if (price < curState.firstCandle1mLow && ema3 < ema9) {
-                    signalMorning = "SELL (Morning ORB)";
+                if (symbol === "NIFTY50") {
+                    // Nifty50: Standard 1-min Breakout
+                    if (price > curState.firstCandle1mHigh && ema3 > ema9) {
+                        signalMorning = "BUY (Morning ORB)";
+                    } else if (price < curState.firstCandle1mLow && ema3 < ema9) {
+                        signalMorning = "SELL (Morning ORB)";
+                    }
+                } else if (symbol === "BANKNIFTY" || symbol === "SENSEX") {
+                    // Bank Nifty & Sensex: Strong signals only (Body Close + RSI + EMA Spread)
+                    const lastCandle1m = curState.candles1m[curState.candles1m.length - 1];
+                    const rsi1m = calculateRSI(curState.history1m);
+                    const minEmaSpread = symbol === "BANKNIFTY" ? 15 : 6;
+                    
+                    const isBodyCloseCE = lastCandle1m && lastCandle1m.close > curState.firstCandle1mHigh;
+                    const isBodyClosePE = lastCandle1m && lastCandle1m.close < curState.firstCandle1mLow;
+                    const isSpreadValid = Math.abs(ema3 - ema9) >= minEmaSpread;
+                    
+                    if (isBodyCloseCE && ema3 > ema9 && rsi1m >= 55 && isSpreadValid) {
+                        signalMorning = "BUY (Morning Strong ORB)";
+                    } else if (isBodyClosePE && ema3 < ema9 && rsi1m <= 45 && isSpreadValid) {
+                        signalMorning = "SELL (Morning Strong ORB)";
+                    }
                 }
             }
         }
@@ -3899,7 +3917,7 @@ const globalUpdateInterval = setInterval(async () => {
             signalGainz: curState.lastSignalGainz || "WAIT",
             signalMorning: curState.lastSignalMorning || "WAIT",
             targetPctMorning: 15,
-            slPctMorning: 7,
+            slPctMorning: 15,
             targetMultiplier,
             slMultiplier
         };
@@ -3967,7 +3985,7 @@ wss.on('connection', (ws) => {
             signalGainz: curState.lastSignalGainz || "WAIT",
             signalMorning: curState.lastSignalMorning || "WAIT",
             targetPctMorning: 15,
-            slPctMorning: 7,
+            slPctMorning: 15,
             targetMultiplier,
             slMultiplier
         };

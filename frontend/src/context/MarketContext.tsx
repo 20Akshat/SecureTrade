@@ -2094,7 +2094,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                      : (b.targetMode === "probability" ? atrTargetOptionPct : (symToScan === "BANKNIFTY" ? 25 : 20)));
                 
                 let localSlPct = activeStrategy === "morning_open"
-                  ? (activeSymbolData.slPctMorning ?? 7)
+                  ? (activeSymbolData.slPctMorning ?? 15)
                   : (activeStrategy === "5ema"  
                      ? serverSlPct
                      : (b.targetMode === "probability" ? atrSlOptionPct : (symToScan === "BANKNIFTY" ? 15 : 15)));
