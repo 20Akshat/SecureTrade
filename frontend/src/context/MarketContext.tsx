@@ -18,6 +18,9 @@ interface MarketData {
   signalGainz?: string;
   targetMultiplier?: number;
   slMultiplier?: number;
+  signalMorning?: string;
+  targetPctMorning?: number;
+  slPctMorning?: number;
 }
 
 export interface BotNotification {
@@ -1021,6 +1024,9 @@ export function MarketProvider({ children }: { children: ReactNode }) {
             signalGainz: raw[sym].signalGainz || "WAIT",
             targetMultiplier: raw[sym].targetMultiplier ? parseFloat(raw[sym].targetMultiplier) : undefined,
             slMultiplier: raw[sym].slMultiplier ? parseFloat(raw[sym].slMultiplier) : undefined,
+            signalMorning: raw[sym].signalMorning || "WAIT",
+            targetPctMorning: raw[sym].targetPctMorning ? parseFloat(raw[sym].targetPctMorning) : undefined,
+            slPctMorning: raw[sym].slPctMorning ? parseFloat(raw[sym].slPctMorning) : undefined,
           };
           if (raw[sym].isMarketOpen !== undefined) {
             openStatus = raw[sym].isMarketOpen;
@@ -1698,8 +1704,21 @@ export function MarketProvider({ children }: { children: ReactNode }) {
               const dte = getDte(symToScan);
               const expiryDateForLabel = getExpiryDate(symToScan);
 
-              let activeStrategy: "crossover" | "5ema" | "gainz" = "crossover";
-              if (b.strategyMode === "auto") {
+              // Detect if current time is within 9:15 - 10:00 AM IST
+              const checkTime = () => {
+                const now = new Date();
+                const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+                const ist = new Date(utc + (3600000 * 5.5));
+                const day = ist.getDay();
+                const timeVal = ist.getHours() * 100 + ist.getMinutes();
+                return day !== 0 && day !== 6 && timeVal >= 915 && timeVal <= 1000;
+              };
+              const isMorningWindow = checkTime();
+
+              let activeStrategy: "crossover" | "5ema" | "gainz" | "morning_open" = "crossover";
+              if (isMorningWindow) {
+                activeStrategy = "morning_open";
+              } else if (b.strategyMode === "auto") {
                 const targetMult = activeSymbolData.targetMultiplier ?? 1.8;
                 if (targetMult <= 1.8) {
                   activeStrategy = "5ema";
@@ -1711,16 +1730,20 @@ export function MarketProvider({ children }: { children: ReactNode }) {
               }
 
               // Check regular strategy signals
-              const isMAStrongSell = activeStrategy === "5ema"
-                ? (activeSymbolData.signal5ema || "").includes("SELL")
-                : (activeStrategy === "gainz"
-                   ? (activeSymbolData.signalGainz || "").includes("SELL")
-                   : activeSymbolData.signal.includes("SELL"));
-              const isMAStrongBuy = activeStrategy === "5ema"
-                ? (activeSymbolData.signal5ema || "").includes("BUY")
-                : (activeStrategy === "gainz"
-                   ? (activeSymbolData.signalGainz || "").includes("BUY")
-                   : activeSymbolData.signal.includes("BUY"));
+              const isMAStrongSell = activeStrategy === "morning_open"
+                ? (activeSymbolData.signalMorning || "").includes("SELL")
+                : (activeStrategy === "5ema"
+                   ? (activeSymbolData.signal5ema || "").includes("SELL")
+                   : (activeStrategy === "gainz"
+                      ? (activeSymbolData.signalGainz || "").includes("SELL")
+                      : activeSymbolData.signal.includes("SELL")));
+              const isMAStrongBuy = activeStrategy === "morning_open"
+                ? (activeSymbolData.signalMorning || "").includes("BUY")
+                : (activeStrategy === "5ema"
+                   ? (activeSymbolData.signal5ema || "").includes("BUY")
+                   : (activeStrategy === "gainz"
+                      ? (activeSymbolData.signalGainz || "").includes("BUY")
+                      : activeSymbolData.signal.includes("BUY")));
 
               let currentDirection: "CE" | "PE" | null = null;
               let currentReason = "";
@@ -2064,13 +2087,17 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                   serverTargetPct = serverSlPct * 3.0;
                 }
 
-                let localTargetPct = activeStrategy === "5ema"
-                  ? serverTargetPct
-                  : (b.targetMode === "probability" ? atrTargetOptionPct : (symToScan === "BANKNIFTY" ? 25 : 20));
+                let localTargetPct = activeStrategy === "morning_open"
+                  ? (activeSymbolData.targetPctMorning ?? 15)
+                  : (activeStrategy === "5ema"
+                     ? serverTargetPct
+                     : (b.targetMode === "probability" ? atrTargetOptionPct : (symToScan === "BANKNIFTY" ? 25 : 20)));
                 
-                let localSlPct = activeStrategy === "5ema"  
-                  ? serverSlPct
-                  : (b.targetMode === "probability" ? atrSlOptionPct : (symToScan === "BANKNIFTY" ? 15 : 15));
+                let localSlPct = activeStrategy === "morning_open"
+                  ? (activeSymbolData.slPctMorning ?? 7)
+                  : (activeStrategy === "5ema"  
+                     ? serverSlPct
+                     : (b.targetMode === "probability" ? atrSlOptionPct : (symToScan === "BANKNIFTY" ? 15 : 15)));
 
                 const isReEntry = b.lastTradedSymbol === getIndexAndDirection(sym) && (Date.now() - b.lastExitTime) < 180000;
                 const minCost = premium * config.lotSize;
@@ -2095,7 +2122,9 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                   }
 
                   let finalReason = "";
-                  if (activeStrategy === "5ema") {
+                  if (activeStrategy === "morning_open") {
+                    finalReason = `⚡ Morning Momentum Scalper! Target: +${localTargetPct.toFixed(0)}% | SL: -${localSlPct.toFixed(0)}% 📈`;
+                  } else if (activeStrategy === "5ema") {
                     finalReason = `⚡ Power of Stocks 5EMA ${currentDirection === "CE" ? "CE Breakout" : "PE Breakdown"}! High risk-reward ratio active. Target Option: +${localTargetPct.toFixed(0)}% | SL Option: -${localSlPct.toFixed(0)}% (1:3 Risk-to-Reward on chart setup) 📈`;
                   } else if (b.targetMode === "probability") {
                     finalReason = `⚡ ${activeStrategy === "gainz" ? "Gainz" : "Crossover"} ATR Target: +${localTargetPct.toFixed(0)}% | SL: -${localSlPct.toFixed(0)}% (Volatility-adjusted using ATR ${activeAtr.toFixed(1)} & multipliers: T:${targetMult} S:${slMult}) 📈`;

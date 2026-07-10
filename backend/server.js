@@ -2743,9 +2743,9 @@ const wss = new WebSocketServer({ server }); // wss yahan define hoga
 // 📡 ANGEL ONE SMARTAPI - REAL TIME PRICES
 // ============================================================
 const marketState = {
-    "NIFTY50":   { history: [], candles: [], currentPrice: 24500, realPrice: 24500, tickCount: 0, lastRsi: 50, lastSignal: "WAIT", lastSignal5ema: "WAIT", lastTargetPct5ema: 20, lastSlPct5ema: 15, isRealHistorySeeded: false },
-    "SENSEX":    { history: [], candles: [], currentPrice: 81000, realPrice: 81000, tickCount: 0, lastRsi: 50, lastSignal: "WAIT", lastSignal5ema: "WAIT", lastTargetPct5ema: 20, lastSlPct5ema: 15, isRealHistorySeeded: false },
-    "BANKNIFTY": { history: [], candles: [], currentPrice: 60661, realPrice: 60661, tickCount: 0, lastRsi: 50, lastSignal: "WAIT", lastSignal5ema: "WAIT", lastTargetPct5ema: 20, lastSlPct5ema: 15, isRealHistorySeeded: false }
+    "NIFTY50":   { history: [], candles: [], currentPrice: 24500, realPrice: 24500, tickCount: 0, lastRsi: 50, lastSignal: "WAIT", lastSignal5ema: "WAIT", lastTargetPct5ema: 20, lastSlPct5ema: 15, isRealHistorySeeded: false, history1m: [], candles1m: [], tickCount1m: 0, currentCandleOpen1m: undefined, currentCandleHigh1m: undefined, currentCandleLow1m: undefined, lastSignalMorning: "WAIT", firstCandle1mHigh: null, firstCandle1mLow: null, morningTradesCount: 0, morningHasPosition: false },
+    "SENSEX":    { history: [], candles: [], currentPrice: 81000, realPrice: 81000, tickCount: 0, lastRsi: 50, lastSignal: "WAIT", lastSignal5ema: "WAIT", lastTargetPct5ema: 20, lastSlPct5ema: 15, isRealHistorySeeded: false, history1m: [], candles1m: [], tickCount1m: 0, currentCandleOpen1m: undefined, currentCandleHigh1m: undefined, currentCandleLow1m: undefined, lastSignalMorning: "WAIT", firstCandle1mHigh: null, firstCandle1mLow: null, morningTradesCount: 0, morningHasPosition: false },
+    "BANKNIFTY": { history: [], candles: [], currentPrice: 60661, realPrice: 60661, tickCount: 0, lastRsi: 50, lastSignal: "WAIT", lastSignal5ema: "WAIT", lastTargetPct5ema: 20, lastSlPct5ema: 15, isRealHistorySeeded: false, history1m: [], candles1m: [], tickCount1m: 0, currentCandleOpen1m: undefined, currentCandleHigh1m: undefined, currentCandleLow1m: undefined, lastSignalMorning: "WAIT", firstCandle1mHigh: null, firstCandle1mLow: null, morningTradesCount: 0, morningHasPosition: false }
 };
 
 // Load last prices to maintain closed market simulation values across restarts
@@ -3592,8 +3592,19 @@ const globalUpdateInterval = setInterval(async () => {
         const todayStr = ist.toISOString().split('T')[0]; // "YYYY-MM-DD"
         
         if (lastSeededDate !== todayStr) {
-            console.log(`🌞 New market day detected (${todayStr}). Automatically re-seeding history...`);
+            console.log(`🌞 New market day detected (${todayStr}). Automatically re-seeding history and resetting morning ranges...`);
             lastSeededDate = todayStr;
+            
+            // Reset morning range metrics for all indices
+            for (const sym in marketState) {
+                marketState[sym].history1m = [];
+                marketState[sym].candles1m = [];
+                marketState[sym].firstCandle1mHigh = null;
+                marketState[sym].firstCandle1mLow = null;
+                marketState[sym].morningTradesCount = 0;
+                marketState[sym].morningHasPosition = false;
+            }
+
             // Run in background without blocking the main tick loop
             seedRealHistory().catch(err => {
                 console.error("❌ Automatic daily re-seeding failed:", err.message);
@@ -3676,6 +3687,38 @@ const globalUpdateInterval = setInterval(async () => {
             curState.currentCandleLow = price;
             curState.tickCount = 0;
 
+        }
+
+        // ── 1-MINUTE CANDLE BUILDER ──
+        curState.tickCount1m = (curState.tickCount1m || 0) + 1;
+        if (curState.currentCandleOpen1m === undefined) {
+            curState.currentCandleOpen1m = price;
+            curState.currentCandleHigh1m = price;
+            curState.currentCandleLow1m = price;
+        }
+        curState.currentCandleHigh1m = Math.max(curState.currentCandleHigh1m, price);
+        curState.currentCandleLow1m = Math.min(curState.currentCandleLow1m, price);
+        
+        if (curState.tickCount1m >= 60 || curState.history1m.length === 0) {
+            curState.history1m.push(price);
+            if (curState.history1m.length > 100) {
+                curState.history1m.shift();
+            }
+            
+            const openVal1m = curState.currentCandleOpen1m;
+            const highVal1m = curState.currentCandleHigh1m;
+            const lowVal1m = curState.currentCandleLow1m;
+            const closeVal1m = price;
+            curState.candles1m = curState.candles1m || [];
+            curState.candles1m.push({ open: openVal1m, high: highVal1m, low: lowVal1m, close: closeVal1m });
+            if (curState.candles1m.length > 100) {
+                curState.candles1m.shift();
+            }
+            
+            curState.currentCandleOpen1m = price;
+            curState.currentCandleHigh1m = price;
+            curState.currentCandleLow1m = price;
+            curState.tickCount1m = 0;
         }
         
         const activeHistory = [...curState.history, price];
@@ -3781,6 +3824,36 @@ const globalUpdateInterval = setInterval(async () => {
             curState.lastSlPct5ema = slPct5ema;
         }
 
+        // ── MORNING SCALPER SIGNAL GENERATION ──
+        let signalMorning = "WAIT";
+        const d = new Date();
+        const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+        const ist = new Date(utc + (3600000 * 5.5));
+        const timeVal = ist.getHours() * 100 + ist.getMinutes();
+        const isMorningWindow = open && timeVal >= 915 && timeVal <= 1000;
+        
+        if (isMorningWindow && curState.candles1m && curState.candles1m.length >= 1) {
+            if (curState.firstCandle1mHigh === null) {
+                curState.firstCandle1mHigh = curState.candles1m[0].high;
+                curState.firstCandle1mLow = curState.candles1m[0].low;
+                console.log(`[Morning Scalper] ${symbol} Range set: High = ${curState.firstCandle1mHigh}, Low = ${curState.firstCandle1mLow}`);
+            }
+            
+            if (curState.firstCandle1mHigh !== null && curState.history1m.length >= 9) {
+                const ema3Arr = calculateEMA(curState.history1m, 3);
+                const ema9Arr = calculateEMA(curState.history1m, 9);
+                const ema3 = ema3Arr[ema3Arr.length - 1];
+                const ema9 = ema9Arr[ema9Arr.length - 1];
+                
+                if (price > curState.firstCandle1mHigh && ema3 > ema9) {
+                    signalMorning = "BUY (Morning ORB)";
+                } else if (price < curState.firstCandle1mLow && ema3 < ema9) {
+                    signalMorning = "SELL (Morning ORB)";
+                }
+            }
+        }
+        curState.lastSignalMorning = signalMorning;
+
         const ema9 = calculateEMA(activeHistory, 9);
         const ema21 = calculateEMA(activeHistory, 21);
         const prevHistory = activeHistory.slice(0, activeHistory.length - 1);
@@ -3824,6 +3897,9 @@ const globalUpdateInterval = setInterval(async () => {
             slPct5ema: curState.lastSlPct5ema || 15,
             atr: atr.toFixed(2),
             signalGainz: curState.lastSignalGainz || "WAIT",
+            signalMorning: curState.lastSignalMorning || "WAIT",
+            targetPctMorning: 15,
+            slPctMorning: 7,
             targetMultiplier,
             slMultiplier
         };
@@ -3889,6 +3965,9 @@ wss.on('connection', (ws) => {
             slPct5ema: curState.lastSlPct5ema || 15,
             atr: atr.toFixed(2),
             signalGainz: curState.lastSignalGainz || "WAIT",
+            signalMorning: curState.lastSignalMorning || "WAIT",
+            targetPctMorning: 15,
+            slPctMorning: 7,
             targetMultiplier,
             slMultiplier
         };
