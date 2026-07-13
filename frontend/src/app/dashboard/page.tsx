@@ -801,7 +801,33 @@ export default function DashboardPage() {
           </button>
           {isAutoTradeActive && (
             <div className="bg-slate-100 border border-slate-200 rounded-xl px-3 py-1.5 shadow-inner text-[10px] font-black text-slate-700">
-              🤖 AI Active Strategy: {strategyMode === "crossover" ? "📈 EMA Crossover (Trend)" : "🕯️ 5EMA (Volatility)"}
+              🤖 AI Active Strategy: {strategyMode === "crossover" ? "📈 EMA Crossover (Trend)" : (strategyMode === "gainz" ? "⚡ Gainz (Breakout)" : "🕯️ 5EMA (Volatility)")}
+            </div>
+          )}
+          {isAutoTradeActive && (
+            <div className="flex items-center bg-slate-100 border border-slate-200 rounded-xl p-0.5 shadow-inner text-[10px] gap-0.5" title="Bot Strategy Mode">
+              <button
+                type="button"
+                onClick={() => setStrategyMode("auto")}
+                className={`px-3 py-1.5 rounded-lg font-black transition-all cursor-pointer ${
+                  strategyMode !== "gainz"
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                🤖 Auto Bot
+              </button>
+              <button
+                type="button"
+                onClick={() => setStrategyMode("gainz")}
+                className={`px-3 py-1.5 rounded-lg font-black transition-all cursor-pointer ${
+                  strategyMode === "gainz"
+                    ? "bg-purple-600 text-white shadow-sm"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                ⚡ Gainz Bot
+              </button>
             </div>
           )}
           {isAutoTradeActive && (
