@@ -107,6 +107,34 @@ export default function BotControl({ rsi, signal }: BotControlProps) {
         </div>
       </div>
 
+      {/* ACTIVE STRATEGY SELECTION */}
+      <div className="mb-5 bg-black/20 p-3 rounded-2xl border border-white/5">
+        <span className="text-[10px] font-extrabold text-purple-400 tracking-wider uppercase mb-2 block text-left">🧠 Active Strategy Mode</span>
+        <div className="flex space-x-2">
+          {[
+            { id: "auto", label: "AUTO" },
+            { id: "crossover", label: "CROSSOVER" },
+            { id: "5ema", label: "5EMA" },
+            { id: "gainz", label: "GAINZ" }
+          ].map((mode) => {
+            const isSelected = strategyMode === mode.id;
+            return (
+              <button
+                key={mode.id}
+                onClick={() => setStrategyMode(mode.id as any)}
+                className={`flex-1 py-1.5 px-1 rounded-xl text-[10px] font-black border transition-all cursor-pointer ${
+                  isSelected
+                    ? "bg-purple-600/35 border-purple-500/50 text-purple-300 shadow-[0_0_10px_rgba(168,85,247,0.2)]"
+                    : "bg-transparent border-white/10 text-gray-500 hover:bg-white/5"
+                }`}
+              >
+                {mode.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-black/40 p-4 rounded-2xl border border-white/5 flex flex-col items-center justify-center">
           <Activity className="w-5 h-5 text-gray-400 mb-2" />

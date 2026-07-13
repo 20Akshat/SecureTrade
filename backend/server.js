@@ -3340,27 +3340,25 @@ function calculateATR(candles, period = 14) {
 function generateSignalGainz(rsi, prices, symbol) {
     if (prices.length < 50) return "WAIT";
     const ema9 = calculateEMA(prices, 9);
-    const ema21 = calculateEMA(prices, 21);
     const ema50 = calculateEMA(prices, 50);
-
-    const prevPrices = prices.slice(0, prices.length - 1);
-    const prevEma9 = calculateEMA(prevPrices, 9);
-    const prevEma21 = calculateEMA(prevPrices, 21);
     
-    const isBullishTrend = ema9 > ema50 && ema21 > ema50;
-    const isBearishTrend = ema9 < ema50 && ema21 < ema50;
+    const isBullishTrend = ema9 > ema50;
+    const isBearishTrend = ema9 < ema50;
     
     const currentClose = prices[prices.length - 1];
     const prevClose = prices[prices.length - 2];
     
+    const prevPrices = prices.slice(0, prices.length - 1);
+    const prevEma9 = calculateEMA(prevPrices, 9);
+    
     const isBullishBreakout = (prevClose <= prevEma9) && (currentClose > ema9) && isBullishTrend;
     const isBearishBreakout = (prevClose >= prevEma9) && (currentClose < ema9) && isBearishTrend;
     
-    // Optimized RSI bounds (49 and 51 instead of 53 and 47) for early entry
-    if (isBullishBreakout && rsi > 49) {
+    // Relaxed RSI bounds (44 and 56 instead of 49 and 51) for active entries
+    if (isBullishBreakout && rsi > 44) {
         return "BUY (Gainz Breakout)";
     }
-    if (isBearishBreakout && rsi < 51) {
+    if (isBearishBreakout && rsi < 56) {
         return "SELL (Gainz Breakdown)";
     }
     return "WAIT";
@@ -3390,19 +3388,19 @@ function generateSignal(rsi, prices, symbol) {
     const isFreshBearishCross = (prevEma9 >= prevEma21) && (ema9 < ema21);
     
     // 1. Extreme Reversals (Requires a fresh crossover in the oversold/overbought zone)
-    if (rsi < 32 && isFreshBullishCross) {
+    if (rsi < 38 && isFreshBullishCross) {
         return "STRONG BUY (Oversold Reversal)";
     }
-    if (rsi > 68 && isFreshBearishCross) {
+    if (rsi > 62 && isFreshBearishCross) {
         return "STRONG SELL (Overbought Reversal)";
     }
     
     // 2. Trend-Following Crosses (Optimized RSI bounds for early entry)
     if (!isFlatMarket) {
-        if (isBullishTrend && rsi >= 40 && isFreshBullishCross) {
+        if (isBullishTrend && rsi >= 38 && isFreshBullishCross) {
             return "BUY (Bullish Trend Cross)";
         }
-        if (isBearishTrend && rsi <= 60 && isFreshBearishCross) {
+        if (isBearishTrend && rsi <= 62 && isFreshBearishCross) {
             return "SELL (Bearish Trend Cross)";
         }
     }
@@ -3762,8 +3760,8 @@ const globalUpdateInterval = setInterval(async () => {
                     curState.pullbackCeAlert = false;
                     curState.pullbackPeAlert = false;
 
-                    const trendBullish = ema9 > ema21 && ema21 > ema50;
-                    const trendBearish = ema9 < ema21 && ema21 < ema50;
+                    const trendBullish = ema9 > ema21;
+                    const trendBearish = ema9 < ema21;
 
                     if (symbol === "SENSEX") {
                         if (trendBullish && lastCandle.low <= ema5 && lastCandle.close > ema5) {
@@ -3780,17 +3778,17 @@ const globalUpdateInterval = setInterval(async () => {
 
                 // 5EMA Reversion (Mean Reversion) for BANKNIFTY
                 if (symbol === "BANKNIFTY") {
-                    const extension = 1.2 * activeAtr;
+                    const extension = 1.0 * activeAtr;
                     const overextendedBelow = lastCandle.close < ema5 - extension;
                     const overextendedAbove = lastCandle.close > ema5 + extension;
 
-                    if (overextendedBelow && rsi < 30) {
+                    if (overextendedBelow && rsi < 36) {
                         signal5ema = "BUY (5EMA Reversion)";
                         const rawSl = ((price - (lastCandle.low - 5)) / price) * 100;
                         slPct5ema = Math.max(10, Math.min(25, rawSl * 0.55));
                         const rawTarget = (Math.abs(price - ema5) / price) * 100;
                         targetPct5ema = Math.max(12, Math.min(45, rawTarget * 0.55));
-                    } else if (overextendedAbove && rsi > 70) {
+                    } else if (overextendedAbove && rsi > 64) {
                         signal5ema = "SELL (5EMA Reversion)";
                         const rawSl = (((lastCandle.high + 5) - price) / price) * 100;
                         slPct5ema = Math.max(10, Math.min(25, rawSl * 0.55));

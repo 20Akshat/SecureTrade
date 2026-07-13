@@ -1322,9 +1322,8 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                     let posStrategy: "crossover" | "5ema" | "gainz" = "crossover";
                     if (b.strategyMode === "auto") {
                       const targetMult = posActive.targetMultiplier ?? 1.8;
-                      if (targetMult <= 1.3) posStrategy = "5ema";
-                      else if (targetMult >= 2.4) posStrategy = "crossover";
-                      else posStrategy = "gainz";
+                      if (targetMult <= 1.8) posStrategy = "5ema";
+                      else posStrategy = "crossover";
                     } else {
                       posStrategy = b.strategyMode as any;
                     }
@@ -1720,12 +1719,10 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                 activeStrategy = "morning_open";
               } else if (b.strategyMode === "auto") {
                 const targetMult = activeSymbolData.targetMultiplier ?? 1.8;
-                if (targetMult <= 1.3) {
+                if (targetMult <= 1.8) {
                   activeStrategy = "5ema";
-                } else if (targetMult >= 2.4) {
-                  activeStrategy = "crossover";
                 } else {
-                  activeStrategy = "gainz";
+                  activeStrategy = "crossover";
                 }
               } else {
                 activeStrategy = b.strategyMode as any;
