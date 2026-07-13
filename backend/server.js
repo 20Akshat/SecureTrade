@@ -1570,8 +1570,15 @@ app.post('/api/sell', authMiddleware, async (req, res) => {
         } else {
             userPortfolioCache[req.user.userId] = localDb.getPortfolio(req.user.userId);
         }
+        // Clear morning open range boundaries to allow next completed candle to set a fresh range
+        const baseSymbol = symbol.startsWith("NIFTY") ? "NIFTY50" : (symbol.startsWith("BANKNIFTY") ? "BANKNIFTY" : (symbol.startsWith("SENSEX") ? "SENSEX" : null));
+        if (baseSymbol && marketState[baseSymbol]) {
+            marketState[baseSymbol].firstCandle1mHigh = null;
+            marketState[baseSymbol].firstCandle1mLow = null;
+            console.log(`[Morning Scalper] Reset range limits for ${baseSymbol} after position closed.`);
+        }
         delete userTradesCache[req.user.userId];
-        
+
         console.log(`✅ [API SELL] Success: User=${req.user.userId}, Symbol=${symbol}, Price=${executionPrice}, PnL=₹${tradePnl.toFixed(2)}`);
         res.status(200).json({ 
             message: `Sold ${quantityToSell} shares of ${symbol} at ₹${executionPrice}! 💸`, 

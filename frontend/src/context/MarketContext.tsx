@@ -1720,10 +1720,12 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                 activeStrategy = "morning_open";
               } else if (b.strategyMode === "auto") {
                 const targetMult = activeSymbolData.targetMultiplier ?? 1.8;
-                if (targetMult <= 1.8) {
+                if (targetMult <= 1.3) {
                   activeStrategy = "5ema";
-                } else {
+                } else if (targetMult >= 2.4) {
                   activeStrategy = "crossover";
+                } else {
+                  activeStrategy = "gainz";
                 }
               } else {
                 activeStrategy = b.strategyMode as any;
