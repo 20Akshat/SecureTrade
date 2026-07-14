@@ -590,7 +590,7 @@ export default memo(function PositionsPanel({ onShowChart }: { onShowChart?: (sy
                             Edit SL / Target
                           </button>
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleSell(pos, Math.abs(pos.quantity)); }}
+                            onClick={(e) => { e.stopPropagation(); handleSell(pos, Math.abs(pos.quantity), pos.livePrice || pos.averagePrice); }}
                             disabled={tradeLoading === pos.symbol}
                             className="flex-1 py-1.5 bg-red-605 hover:bg-red-500 text-white text-xs font-black rounded-lg transition-all disabled:opacity-50 tracking-wide flex items-center justify-center gap-1.5"
                           >

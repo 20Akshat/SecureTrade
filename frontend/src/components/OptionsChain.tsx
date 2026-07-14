@@ -391,6 +391,7 @@ export default memo(function OptionsChain({ onShowChart }: { onShowChart?: (symb
           body: JSON.stringify({
             symbol,
             quantity: lots * config.lotSize,
+            price: currentPremium
           }),
           signal: controller.signal
         });
