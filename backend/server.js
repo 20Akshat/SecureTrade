@@ -3342,8 +3342,15 @@ function generateSignalGainz(rsi, prices, symbol) {
     const ema9 = calculateEMA(prices, 9);
     const ema50 = calculateEMA(prices, 50);
     
-    const isBullishTrend = ema9 > ema50;
-    const isBearishTrend = ema9 < ema50;
+    // Check if it's the morning session (9:15 - 10:00 AM IST) to bypass trend filtering
+    const d = new Date();
+    const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+    const ist = new Date(utc + (3600000 * 5.5));
+    const timeVal = ist.getHours() * 100 + ist.getMinutes();
+    const isMorning = timeVal >= 915 && timeVal <= 1000;
+    
+    const isBullishTrend = isMorning ? true : (ema9 > ema50);
+    const isBearishTrend = isMorning ? true : (ema9 < ema50);
     
     const currentClose = prices[prices.length - 1];
     const prevClose = prices[prices.length - 2];
