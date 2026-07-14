@@ -2569,11 +2569,12 @@ async function formatOptionCandlesIfNeeded(indexCandles, symbol) {
     }
 
     const calculatedCandles = indexCandles.map(c => {
-        const open = runBlackScholes(c.open, strike, dte, isCall, iv);
-        const close = runBlackScholes(c.close, strike, dte, isCall, iv);
+        const candleDte = parseDteFromSymbol(symbol, c.time);
+        const open = runBlackScholes(c.open, strike, candleDte, isCall, iv);
+        const close = runBlackScholes(c.close, strike, candleDte, isCall, iv);
         
-        const optionH1 = runBlackScholes(c.high, strike, dte, isCall, iv);
-        const optionH2 = runBlackScholes(c.low, strike, dte, isCall, iv);
+        const optionH1 = runBlackScholes(c.high, strike, candleDte, isCall, iv);
+        const optionH2 = runBlackScholes(c.low, strike, candleDte, isCall, iv);
         const high = Math.max(open, close, optionH1, optionH2);
         const low = Math.min(open, close, optionH1, optionH2);
 
@@ -4151,7 +4152,7 @@ if (process.platform === "win32") {
 }
 
 // Helper to compute DTE on backend
-function parseDteFromSymbol(symbol) {
+function parseDteFromSymbol(symbol, candleTime = null) {
     const parsed = parseOptionSymbol(symbol);
     if (!parsed) return 1;
     
@@ -4167,7 +4168,7 @@ function parseDteFromSymbol(symbol) {
     
     const month = months[monthStr.toUpperCase()] || 0;
     const expiryMidnight = new Date(parseInt(year), month, parseInt(day));
-    const today = new Date();
+    const today = candleTime ? new Date(candleTime * 1000) : new Date();
     const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     
     const diffTime = expiryMidnight.getTime() - todayMidnight.getTime();
