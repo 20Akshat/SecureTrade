@@ -3340,7 +3340,8 @@ function calculateATR(candles, period = 14) {
 
 function generateSignalGainz(rsi, prices, symbol) {
     if (prices.length < 50) return "WAIT";
-    const ema9 = calculateEMA(prices, 9);
+    const ema9  = calculateEMA(prices, 9);
+    const ema21 = calculateEMA(prices, 21);
     const ema50 = calculateEMA(prices, 50);
     
     // Check if it's the morning session (9:15 - 10:00 AM IST) to bypass trend filtering
@@ -3350,23 +3351,32 @@ function generateSignalGainz(rsi, prices, symbol) {
     const timeVal = ist.getHours() * 100 + ist.getMinutes();
     const isMorning = timeVal >= 915 && timeVal <= 1000;
     
-    const isBullishTrend = isMorning ? true : (ema9 > ema50);
-    const isBearishTrend = isMorning ? true : (ema9 < ema50);
-    
     const currentClose = prices[prices.length - 1];
-    const prevClose = prices[prices.length - 2];
+
+    // ── STRONG TREND FILTER ──
+    // After 10:00 AM: price must be on the correct side of EMA50
+    // AND EMA9 must be above/below EMA21 (confirming direction)
+    // Morning session bypasses this for fast ORB-style entries
+    const isBullishTrend = isMorning
+        ? true
+        : (ema9 > ema50 && ema9 > ema21 && currentClose > ema50);
+
+    const isBearishTrend = isMorning
+        ? true
+        : (ema9 < ema50 && ema9 < ema21 && currentClose < ema50);
     
+    const prevClose = prices[prices.length - 2];
     const prevPrices = prices.slice(0, prices.length - 1);
     const prevEma9 = calculateEMA(prevPrices, 9);
     
     const isBullishBreakout = (prevClose <= prevEma9) && (currentClose > ema9) && isBullishTrend;
     const isBearishBreakout = (prevClose >= prevEma9) && (currentClose < ema9) && isBearishTrend;
     
-    // Relaxed RSI bounds (44 and 56 instead of 49 and 51) for active entries
-    if (isBullishBreakout && rsi > 44) {
+    // Tightened RSI bounds: >48 for buy (avoid choppy mid-zone), <52 for sell
+    if (isBullishBreakout && rsi > 48) {
         return "BUY (Gainz Breakout)";
     }
-    if (isBearishBreakout && rsi < 56) {
+    if (isBearishBreakout && rsi < 52) {
         return "SELL (Gainz Breakdown)";
     }
     return "WAIT";
