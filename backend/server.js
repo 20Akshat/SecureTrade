@@ -3867,6 +3867,8 @@ const globalUpdateInterval = setInterval(async () => {
                 if (curState.tickCount === 0) {
                     curState.pullbackCeAlert = false;
                     curState.pullbackPeAlert = false;
+                    curState.nifty5emaCeAlert = false;
+                    curState.nifty5emaPeAlert = false;
 
                     const trendBullish = ema9 > ema21;
                     const trendBearish = ema9 < ema21;
@@ -3880,6 +3882,24 @@ const globalUpdateInterval = setInterval(async () => {
                             curState.pullbackPeAlert = true;
                             curState.pullbackPeSl = lastCandle.high + 5;
                             curState.pullbackLow = lastCandle.low;
+                        }
+                    }
+
+                    // ── NIFTY50 5EMA alert: set flag at candle close, fire within next candle ──
+                    if (symbol === "NIFTY50" && curState.candles.length >= 2) {
+                        const prevCandle = curState.candles[curState.candles.length - 2];
+                        // Triple EMA alignment for strong trend confirmation
+                        const strongBullish = ema9 > ema21 && ema21 > ema50 && lastCandle.close > ema5;
+                        const strongBearish = ema9 < ema21 && ema21 < ema50 && lastCandle.close < ema5;
+
+                        if (strongBullish && prevCandle.close < ema5 && rsi > 45 && rsi < 72) {
+                            // Candle just crossed above EMA5 in uptrend → set CE alert
+                            curState.nifty5emaCeAlert = true;
+                            curState.nifty5emaSlLevel = lastCandle.low - 8;
+                        } else if (strongBearish && prevCandle.close > ema5 && rsi > 28 && rsi < 55) {
+                            // Candle just crossed below EMA5 in downtrend → set PE alert
+                            curState.nifty5emaPeAlert = true;
+                            curState.nifty5emaSlLevel = lastCandle.high + 8;
                         }
                     }
                 }
@@ -3919,6 +3939,23 @@ const globalUpdateInterval = setInterval(async () => {
                         slPct5ema = Math.max(10, Math.min(25, rawSl * 0.55));
                         targetPct5ema = slPct5ema * 2.0; // 1:2 RR
                         curState.pullbackPeAlert = false;
+                    }
+                }
+
+                // ── 5EMA BREAKOUT for NIFTY50 (alert-based, fires once per candle) ──
+                if (symbol === "NIFTY50") {
+                    if (curState.nifty5emaCeAlert) {
+                        signal5ema = "BUY (5EMA Breakout)";
+                        const rawSl = ((price - curState.nifty5emaSlLevel) / price) * 100;
+                        slPct5ema = Math.max(8, Math.min(20, rawSl * 0.52));
+                        targetPct5ema = slPct5ema * 2.5; // 1:2.5 RR
+                        curState.nifty5emaCeAlert = false; // fire once only
+                    } else if (curState.nifty5emaPeAlert) {
+                        signal5ema = "SELL (5EMA Breakdown)";
+                        const rawSl = ((curState.nifty5emaSlLevel - price) / price) * 100;
+                        slPct5ema = Math.max(8, Math.min(20, rawSl * 0.52));
+                        targetPct5ema = slPct5ema * 2.5; // 1:2.5 RR
+                        curState.nifty5emaPeAlert = false; // fire once only
                     }
                 }
             }
