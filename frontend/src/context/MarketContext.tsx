@@ -2100,13 +2100,13 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                   ? (activeSymbolData.targetPctMorning ?? 15)
                   : (activeStrategy === "5ema"
                      ? serverTargetPct
-                     : (b.targetMode === "probability" ? atrTargetOptionPct : (symToScan === "BANKNIFTY" ? 25 : 20)));
+                     : (b.targetMode === "probability" ? atrTargetOptionPct : (symToScan === "BANKNIFTY" ? 60 : 50)));
                 
                 let localSlPct = activeStrategy === "morning_open"
                   ? (activeSymbolData.slPctMorning ?? 15)
                   : (activeStrategy === "5ema"  
                      ? serverSlPct
-                     : (b.targetMode === "probability" ? atrSlOptionPct : (symToScan === "BANKNIFTY" ? 15 : 15)));
+                     : (b.targetMode === "probability" ? atrSlOptionPct : (symToScan === "BANKNIFTY" ? 30 : 25)));
 
                 const isReEntry = b.lastTradedSymbol === getIndexAndDirection(sym) && (Date.now() - b.lastExitTime) < 180000;
                 const minCost = premium * config.lotSize;
