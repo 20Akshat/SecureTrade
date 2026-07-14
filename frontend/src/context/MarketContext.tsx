@@ -71,6 +71,8 @@ interface MarketContextType {
   enabledSymbols: string[];
   setEnabledSymbols: (symbols: string[]) => void;
   triggerTransactionLock: () => void;
+  activeLimits: Record<string, { sl: number; target: number; qty: number; targetActive?: boolean; isZeroHero?: boolean }>;
+  setActiveLimits: React.Dispatch<React.SetStateAction<Record<string, { sl: number; target: number; qty: number; targetActive?: boolean; isZeroHero?: boolean }>>>;
 }
 
 const MarketContext = createContext<MarketContextType | undefined>(undefined);
@@ -287,6 +289,18 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("st_enabled_symbols_v2", JSON.stringify(enabledSymbols));
   }, [enabledSymbols]);
 
+  const [activeLimits, setActiveLimits] = useState<Record<string, { sl: number; target: number; qty: number; targetActive?: boolean; isZeroHero?: boolean }>>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("st_active_limits");
+      return saved ? JSON.parse(saved) : {};
+    }
+    return {};
+  });
+
+  useEffect(() => {
+    localStorage.setItem("st_active_limits", JSON.stringify(activeLimits));
+  }, [activeLimits]);
+
 
   const toggleZeroHero = () => {
     setIsZeroHeroActive(prev => {
@@ -301,12 +315,13 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   };
 
   // Cache refs for option pricing and callback ref for auth balance updates
-  const lastOptionFetchTime = useRef<number>(0);
-  const lastOptionPremium = useRef<number>(0);
-  const fetchingOptionRef = useRef<boolean>(false);
-  const lastZhOptionFetchTime = useRef<number>(0);
-  const lastZhOptionPremium = useRef<number>(0);
-  const fetchingZhOptionRef = useRef<boolean>(false);
+  // SYMBOL-KEYED maps to prevent cross-symbol price leaking (e.g., NIFTY price bleeding into SENSEX)
+  const lastOptionFetchTime = useRef<Record<string, number>>({});
+  const lastOptionPremium = useRef<Record<string, number>>({});
+  const fetchingOptionRef = useRef<Record<string, boolean>>({});
+  const lastZhOptionFetchTime = useRef<Record<string, number>>({});
+  const lastZhOptionPremium = useRef<Record<string, number>>({});
+  const fetchingZhOptionRef = useRef<Record<string, boolean>>({});
   const updateBalanceRef = useRef(updateBalance);
   const balanceRef = useRef(balance);
   const lastMarketDataRef = useRef<Record<string, MarketData>>({});
@@ -548,23 +563,23 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           b.zhEntrySymbol = botNotification.symbol;
           b.zhEntryPrice = finalPrice;
           b.zhMaxLots = extraLots || botMaxLots;
-          lastZhOptionPremium.current = finalPrice;
-          lastZhOptionFetchTime.current = 0;
+          lastZhOptionPremium.current[botNotification.symbol] = finalPrice;
+          lastZhOptionFetchTime.current[botNotification.symbol] = 0;
           b.zhIsShort = false;
           b.zhTargetPct = targetPct;
           b.zhSlPct = slPct;
           b.zhHasRecommendedAveraging = false;
 
           try {
-            const storedLimits = localStorage.getItem("st_active_limits");
-            const limits = storedLimits ? JSON.parse(storedLimits) : {};
-            limits[b.zhEntrySymbol] = {
-              sl: parseFloat(stopLossPrice.toFixed(2)),
-              target: parseFloat(targetPrice.toFixed(2)),
-              qty: b.zhMaxLots * config.lotSize,
-              isZeroHero: true
-            };
-            localStorage.setItem("st_active_limits", JSON.stringify(limits));
+            setActiveLimits(prev => ({
+              ...prev,
+              [b.zhEntrySymbol]: {
+                sl: parseFloat(stopLossPrice.toFixed(2)),
+                target: parseFloat(targetPrice.toFixed(2)),
+                qty: b.zhMaxLots * config.lotSize,
+                isZeroHero: true
+              }
+            }));
           } catch {}
 
           if (selectedSymbol === b.zhEntrySymbol) {
@@ -594,15 +609,15 @@ export function MarketProvider({ children }: { children: ReactNode }) {
             b.hasRecommendedAveraging2 = false;
 
             try {
-              const storedLimits = localStorage.getItem("st_active_limits");
-              const limits = storedLimits ? JSON.parse(storedLimits) : {};
-              limits[b.entrySymbol2] = {
-                sl: parseFloat(stopLossPrice.toFixed(2)),
-                target: parseFloat(targetPrice.toFixed(2)),
-                targetActive: false,
-                qty: b.maxLots2 * config.lotSize
-              };
-              localStorage.setItem("st_active_limits", JSON.stringify(limits));
+              setActiveLimits(prev => ({
+                ...prev,
+                [b.entrySymbol2]: {
+                  sl: parseFloat(stopLossPrice.toFixed(2)),
+                  target: parseFloat(targetPrice.toFixed(2)),
+                  targetActive: true,
+                  qty: b.maxLots2 * config.lotSize
+                }
+              }));
             } catch {}
 
             if (selectedSymbol === b.entrySymbol2) {
@@ -623,8 +638,8 @@ export function MarketProvider({ children }: { children: ReactNode }) {
             b.entrySymbol = botNotification.symbol;
             b.entryPrice = finalPrice;
             b.maxLots = extraLots || botMaxLots;
-            lastOptionPremium.current = finalPrice;
-            lastOptionFetchTime.current = 0;
+            lastOptionPremium.current[botNotification.symbol] = finalPrice;
+            lastOptionFetchTime.current[botNotification.symbol] = 0;
             b.hasRecommendedSquareOff = false;
             b.hasRecommendedAveraging = false;
             b.isShort = botNotification.type === "PE";
@@ -633,15 +648,15 @@ export function MarketProvider({ children }: { children: ReactNode }) {
             b.hasNotified15MinAction = false;
 
             try {
-              const storedLimits = localStorage.getItem("st_active_limits");
-              const limits = storedLimits ? JSON.parse(storedLimits) : {};
-              limits[b.entrySymbol] = {
-                sl: parseFloat(stopLossPrice.toFixed(2)),
-                target: parseFloat(targetPrice.toFixed(2)), // Suggest target from start
-                targetActive: false, // Inactive on entry, let profit run
-                qty: b.maxLots * config.lotSize
-              };
-              localStorage.setItem("st_active_limits", JSON.stringify(limits));
+              setActiveLimits(prev => ({
+                ...prev,
+                [b.entrySymbol]: {
+                  sl: parseFloat(stopLossPrice.toFixed(2)),
+                  target: parseFloat(targetPrice.toFixed(2)),
+                  targetActive: true,
+                  qty: b.maxLots * config.lotSize
+                }
+              }));
             } catch {}
 
             if (selectedSymbol === b.entrySymbol) {
@@ -822,8 +837,8 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         b.zhEntryPrice = activeZhDbPos.averagePrice;
         b.zhEntryTime = Date.now();
         b.zhMaxLots = actualLots;
-        lastZhOptionPremium.current = activeZhDbPos.averagePrice;
-        lastZhOptionFetchTime.current = 0;
+        lastZhOptionPremium.current[botSymbol] = activeZhDbPos.averagePrice;
+        lastZhOptionFetchTime.current[botSymbol] = 0;
         b.zhIsShort = activeZhDbPos.symbol.endsWith("PE");
         b.zhHasRecommendedAveraging = false;
 
@@ -841,6 +856,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
             isZeroHero: true
           };
           localStorage.setItem("st_active_limits", JSON.stringify(limits));
+          setActiveLimits({ ...limits });
         } catch {}
       } else {
         if (b.zhMaxLots !== actualLots) {
@@ -877,8 +893,8 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         b.entryPrice = pos1.averagePrice;
         b.entryTime = Date.now();
         b.maxLots = actualLots;
-        lastOptionPremium.current = pos1.averagePrice;
-        lastOptionFetchTime.current = 0;
+        lastOptionPremium.current[botSymbol] = pos1.averagePrice;
+        lastOptionFetchTime.current[botSymbol] = 0;
         b.isShort = pos1.symbol.endsWith("PE");
         b.hasRecommendedSquareOff = false;
         b.hasRecommendedAveraging = false;
@@ -898,6 +914,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
             qty: Math.abs(pos1.quantity)
           };
           localStorage.setItem("st_active_limits", JSON.stringify(limits));
+          setActiveLimits({ ...limits });
         } catch {}
       } else {
         if (b.maxLots !== actualLots) {
@@ -972,6 +989,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
             qty: Math.abs(pos2.quantity)
           };
           localStorage.setItem("st_active_limits", JSON.stringify(limits));
+          setActiveLimits({ ...limits });
         } catch {}
       } else {
         if (b.maxLots2 !== actualLots2) {
@@ -1111,9 +1129,9 @@ export function MarketProvider({ children }: { children: ReactNode }) {
               let currentPremium = t.entryPrice;
               let gotRealPrice = false;
               
-              if (Date.now() - lastOptionFetchTime.current >= 3000 && !fetchingOptionRef.current) {
-                fetchingOptionRef.current = true;
-                lastOptionFetchTime.current = Date.now();
+              if (Date.now() - (lastOptionFetchTime.current[t.symbol] || 0) >= 3000 && !fetchingOptionRef.current[t.symbol]) {
+                fetchingOptionRef.current[t.symbol] = true;
+                lastOptionFetchTime.current[t.symbol] = Date.now();
                 try {
                   const ltpRes = await fetch(`https://securetrade-n3qh.onrender.com/api/option-ltp`, {
                     method: "POST",
@@ -1124,17 +1142,17 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                     const ltpData = await ltpRes.json();
                     if (ltpData.ltp && ltpData.ltp > 0) {
                       currentPremium = ltpData.ltp;
-                      lastOptionPremium.current = ltpData.ltp;
+                      lastOptionPremium.current[t.symbol] = ltpData.ltp;
                       gotRealPrice = true;
                     }
                   }
                 } catch {} finally {
-                  fetchingOptionRef.current = false;
+                  fetchingOptionRef.current[t.symbol] = false;
                 }
               }
 
               if (!gotRealPrice) {
-                currentPremium = lastOptionPremium.current || t.entryPrice;
+                currentPremium = lastOptionPremium.current[t.symbol] || t.entryPrice;
               }
 
               // 🛡️ GLITCH GUARD: 10-second grace period after entry
@@ -1239,27 +1257,9 @@ export function MarketProvider({ children }: { children: ReactNode }) {
 
                 // Target Exit Logic:
                 try {
-                  const storedLimits = localStorage.getItem("st_active_limits");
-                  const limits = storedLimits ? JSON.parse(storedLimits) : {};
-                  const limit = limits[t.symbol];
-                  
-                  const isTargetActive = limit ? !!limit.targetActive : false;
-                  
                   if (userTargetPrice !== null) {
-                    if (userTargetPrice > 0 && isTargetActive) {
-                      // Target is active (either user confirmed or 2 minutes passed)
+                    if (userTargetPrice > 0) {
                       targetHit = currentPremium >= userTargetPrice;
-                    } else if (userTargetPrice > 0 && !isTargetActive) {
-                      // Target is suggested but not active yet.
-                      if (elapsedSeconds >= 120) {
-                        // 2 minutes passed! Auto-activate it now if premium is still below target
-                        if (currentPremium < userTargetPrice) {
-                          console.log(`🤖 [Auto-Target] 2 minutes elapsed. Auto-activating target for ${t.symbol} @ ₹${userTargetPrice.toFixed(2)}`);
-                          limits[t.symbol].targetActive = true;
-                          localStorage.setItem("st_active_limits", JSON.stringify(limits));
-                        }
-                      }
-                      targetHit = false; // Profit is allowed to run for now
                     } else {
                       // If userTargetPrice is 0 or negative, target is disabled!
                       targetHit = false;
@@ -1422,12 +1422,12 @@ export function MarketProvider({ children }: { children: ReactNode }) {
             const strike = typeIdx !== -1 ? parseFloat(parts[typeIdx - 1]) : NaN;
 
             if (!isNaN(strike)) {
-              let currentPremium = lastZhOptionPremium.current;
+              let currentPremium = lastZhOptionPremium.current[b.zhEntrySymbol] || 0;
               let gotRealPrice = false;
               
-              if (Date.now() - lastZhOptionFetchTime.current >= 3000 && !fetchingZhOptionRef.current) {
-                fetchingZhOptionRef.current = true;
-                lastZhOptionFetchTime.current = Date.now();
+              if (Date.now() - (lastZhOptionFetchTime.current[b.zhEntrySymbol] || 0) >= 3000 && !fetchingZhOptionRef.current[b.zhEntrySymbol]) {
+                fetchingZhOptionRef.current[b.zhEntrySymbol] = true;
+                lastZhOptionFetchTime.current[b.zhEntrySymbol] = Date.now();
                 try {
                   const ltpRes = await fetch(`https://securetrade-n3qh.onrender.com/api/option-ltp`, {
                     method: "POST",
@@ -1438,17 +1438,17 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                     const ltpData = await ltpRes.json();
                     if (ltpData.ltp && ltpData.ltp > 0) {
                       currentPremium = ltpData.ltp;
-                      lastZhOptionPremium.current = ltpData.ltp;
+                      lastZhOptionPremium.current[b.zhEntrySymbol] = ltpData.ltp;
                       gotRealPrice = true;
                     }
                   }
                 } catch {} finally {
-                  fetchingZhOptionRef.current = false;
+                  fetchingZhOptionRef.current[b.zhEntrySymbol] = false;
                 }
               }
 
               if (!gotRealPrice) {
-                currentPremium = lastZhOptionPremium.current || b.zhEntryPrice;
+                currentPremium = lastZhOptionPremium.current[b.zhEntrySymbol] || b.zhEntryPrice;
               }
 
               // 🛡️ GLITCH GUARD: 10-second grace period after ZH entry
@@ -1785,13 +1785,17 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                 }
               }
 
+              // 🛡️ REVERSAL GUARD: Track if we just did a reversal exit this tick to block new entry
+              let didReversalExit = false;
+
               if (currentDirection) {
                 // Check for Trend Reversal: if we have an active position, and the new signal is in the opposite direction
                 const activeIndex1 = b.entrySymbol ? b.entrySymbol.split(" ")[0] : "";
                 if (b.hasPosition && activeIndex1 === symToScan) {
                   const existingDirection = b.isShort ? "PE" : "CE";
                   if (currentDirection !== existingDirection) {
-                    console.log(`🔄 [Trend Reversal] Opposite signal (${currentDirection}) detected against existing position (${existingDirection}) on ${symToScan}. Executing early exit...`);
+                    console.log(`🔄 [Trend Reversal] Opposite signal (${currentDirection}) detected against existing position (${existingDirection}) on ${symToScan}. Executing early exit only - no new entry this tick.`);
+                    didReversalExit = true; // Block new entry this tick
                     
                     // Exit Position 2 if active and index matches
                                        // Exit Position 2 if active and index matches
@@ -1975,8 +1979,14 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                     }
                   }
                 }
-                const expiryLabel = expiryDateForLabel.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" }).toUpperCase();
                 
+                // 🛡️ If we just did a reversal exit this tick, skip new entry to prevent phantom orders
+                if (didReversalExit) {
+                  continue;
+                }
+
+                const expiryLabel = expiryDateForLabel.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" }).toUpperCase();
+
                 // Determine if signal is 99% Surety (EMA alignment + strong RSI breakout)
                 let isHighConfidence = false;
                 if (currentDirection === "CE") {
@@ -2202,12 +2212,12 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         // 2. Combine and update bot status string showing active position details
         let statusStr = "";
         if (b.hasPosition && b.entryPrice > 0) {
-          const currentNormalPrem = lastOptionPremium.current || b.entryPrice;
+          const currentNormalPrem = lastOptionPremium.current[b.entrySymbol] || b.entryPrice;
           const normalPnl = ((currentNormalPrem - b.entryPrice) / b.entryPrice) * 100;
           statusStr += `📊 Normal: ${b.entrySymbol.split(" ")[0]} (${normalPnl >= 0 ? "+" : ""}${normalPnl.toFixed(1)}%)`;
         }
         if (b.hasZeroHeroPosition && b.zhEntryPrice > 0) {
-          const currentZHPercent = lastZhOptionPremium.current || b.zhEntryPrice;
+          const currentZHPercent = lastZhOptionPremium.current[b.zhEntrySymbol] || b.zhEntryPrice;
           const zhPnl = ((currentZHPercent - b.zhEntryPrice) / b.zhEntryPrice) * 100;
           if (statusStr) statusStr += " | ";
           statusStr += `⚡ ZH: ${b.zhEntrySymbol.split(" ")[0]} (${zhPnl >= 0 ? "+" : ""}${zhPnl.toFixed(1)}%)`;
@@ -2280,7 +2290,9 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       triggerTestNotification,
       enabledSymbols,
       setEnabledSymbols,
-      triggerTransactionLock
+      triggerTransactionLock,
+      activeLimits,
+      setActiveLimits
     }}>
       {children}
     </MarketContext.Provider>

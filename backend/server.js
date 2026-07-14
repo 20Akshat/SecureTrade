@@ -3479,6 +3479,57 @@ async function seedRealHistory() {
                     marketState[symbol].lastSignal = signal;
 
                     console.log(`🌱 [${symbol}] Seeded REAL history: ${history.length} candles, Initial RSI: ${rsi.toFixed(2)}, Signal: ${signal}`);
+
+                    // Wait 1 second to respect rate limits, then fetch ONE_MINUTE candles
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    const controller1m = new AbortController();
+                    const timeoutId1m = setTimeout(() => controller1m.abort(), 4000);
+                    try {
+                        const response1m = await axios.post(
+                            'https://apiconnect.angelone.in/rest/secure/angelbroking/historical/v1/getCandleData',
+                            {
+                                exchange: config.exch,
+                                symboltoken: config.token,
+                                interval: "ONE_MINUTE",
+                                fromdate: dateRange.fromStr,
+                                todate: dateRange.toStr
+                            },
+                            {
+                                headers: {
+                                    'Authorization': `Bearer ${angelJwtToken}`,
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-UserType': 'USER',
+                                    'X-SourceID': 'WEB',
+                                    'X-PrivateKey': process.env.ANGEL_API_KEY,
+                                    'X-ClientLocalIP': '192.168.1.1',
+                                    'X-ClientPublicIP': '106.202.70.114',
+                                    'X-MACAddress': '00:00:00:00:00:00'
+                                },
+                                signal: controller1m.signal
+                            }
+                        );
+                        clearTimeout(timeoutId1m);
+
+                        if (response1m.data && response1m.data.status && response1m.data.data && response1m.data.data.length > 0) {
+                            const rawCandles1m = response1m.data.data.slice(-80);
+                            marketState[symbol].history1m = rawCandles1m.map(c => c[4]);
+                            marketState[symbol].candles1m = rawCandles1m.map(c => ({
+                                open: c[1],
+                                high: c[2],
+                                low: c[3],
+                                close: c[4]
+                            }));
+                            console.log(`🌱 [${symbol}] Seeded REAL 1m history: ${marketState[symbol].history1m.length} candles.`);
+                        } else {
+                            console.warn(`⚠️ [${symbol}] Real 1m history returned empty, seeding mock 1m history`);
+                            seedMock1mHistory(symbol);
+                        }
+                    } catch (e1m) {
+                        clearTimeout(timeoutId1m);
+                        console.warn(`⚠️ [${symbol}] Real 1m history fetch failed: ${e1m.message}. Seeding mock 1m history`);
+                        seedMock1mHistory(symbol);
+                    }
                 } else {
                     checkIfTokenInvalid(response);
                     throw new Error("Empty historical response");
@@ -3520,6 +3571,24 @@ function seedFallbackHistory(symbol) {
     }
     marketState[symbol].history = history;
     marketState[symbol].candles = candles;
+
+    const history1m = [];
+    const candles1m = [];
+    let tempPrice1m = basePrice;
+    for (let i = 0; i < 80; i++) {
+        const prevPrice = tempPrice1m;
+        tempPrice1m += (Math.random() - 0.5) * (basePrice * 0.0001);
+        history1m.push(tempPrice1m);
+        
+        const open = prevPrice;
+        const close = tempPrice1m;
+        const high = Math.max(open, close) + Math.random() * (basePrice * 0.0001);
+        const low = Math.min(open, close) - Math.random() * (basePrice * 0.0001);
+        candles1m.push({ open, high, low, close });
+    }
+    marketState[symbol].history1m = history1m;
+    marketState[symbol].candles1m = candles1m;
+
     marketState[symbol].currentCandleOpen = basePrice;
     marketState[symbol].currentCandleHigh = basePrice;
     marketState[symbol].currentCandleLow = basePrice;
@@ -3531,6 +3600,27 @@ function seedFallbackHistory(symbol) {
     marketState[symbol].lastSignal = signal;
     console.log(`🌱 [${symbol}] Seeded MOCK fallback history: ${history.length} points, Initial RSI: ${rsi.toFixed(2)}, Signal: ${signal}`);
 }
+
+function seedMock1mHistory(symbol) {
+    const basePrice = marketState[symbol].realPrice;
+    const history1m = [];
+    const candles1m = [];
+    let tempPrice = basePrice;
+    for (let i = 0; i < 80; i++) {
+        const prevPrice = tempPrice;
+        tempPrice += (Math.random() - 0.5) * (basePrice * 0.0001);
+        history1m.push(tempPrice);
+        
+        const open = prevPrice;
+        const close = tempPrice;
+        const high = Math.max(open, close) + Math.random() * (basePrice * 0.0001);
+        const low = Math.min(open, close) - Math.random() * (basePrice * 0.0001);
+        candles1m.push({ open, high, low, close });
+    }
+    marketState[symbol].history1m = history1m;
+    marketState[symbol].candles1m = candles1m;
+}
+
 for (const symbol in marketState) {
     seedFallbackHistory(symbol);
 }

@@ -41,7 +41,7 @@ function parseDteFromSymbol(symbol: string): number {
 
 export default memo(function PositionsPanel({ onShowChart }: { onShowChart?: (symbol: string) => void }) {
   const { token, updateBalance } = useAuth();
-  const { marketData, syncPositionWithDb, isMarketOpen, triggerTransactionLock } = useMarket();
+  const { marketData, syncPositionWithDb, isMarketOpen, triggerTransactionLock, activeLimits, setActiveLimits } = useMarket();
   const [positions, setPositions] = useState<Position[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [limitOrders, setLimitOrders] = useState<any[]>([]);
@@ -54,14 +54,6 @@ export default memo(function PositionsPanel({ onShowChart }: { onShowChart?: (sy
   const [buyMoreLots, setBuyMoreLots] = useState<Record<string, number>>({});
   const [tradeLoading, setTradeLoading] = useState<string | null>(null);
 
-  // Background active SL/Target order tracking
-  const [activeLimits, setActiveLimits] = useState<Record<string, { sl: number; target: number; qty: number }>>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("st_active_limits");
-      return saved ? JSON.parse(saved) : {};
-    }
-    return {};
-  });
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const fetchingPosRef = useRef(false);
   const fetchingTradesRef = useRef(false);
@@ -139,9 +131,6 @@ export default memo(function PositionsPanel({ onShowChart }: { onShowChart?: (sy
     return () => clearInterval(interval);
   }, [token]);
 
-  useEffect(() => {
-    localStorage.setItem("st_active_limits", JSON.stringify(activeLimits));
-  }, [activeLimits]);
 
   // Auto-cleanup limit orders for positions that are closed
   useEffect(() => {
