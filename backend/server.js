@@ -3533,6 +3533,7 @@ async function seedRealHistory() {
                             const rawCandles1m = response1m.data.data.slice(-80);
                             marketState[symbol].history1m = rawCandles1m.map(c => c[4]);
                             marketState[symbol].candles1m = rawCandles1m.map(c => ({
+                                time: c[0],
                                 open: c[1],
                                 high: c[2],
                                 low: c[3],
@@ -3593,6 +3594,10 @@ function seedFallbackHistory(symbol) {
     const history1m = [];
     const candles1m = [];
     let tempPrice1m = basePrice;
+    const nowTimeFallback = new Date();
+    const utcTimeFallback = nowTimeFallback.getTime() + (nowTimeFallback.getTimezoneOffset() * 60000);
+    const istTimeFallback = new Date(utcTimeFallback + (3600000 * 5.5));
+
     for (let i = 0; i < 80; i++) {
         const prevPrice = tempPrice1m;
         tempPrice1m += (Math.random() - 0.5) * (basePrice * 0.0001);
@@ -3602,7 +3607,13 @@ function seedFallbackHistory(symbol) {
         const close = tempPrice1m;
         const high = Math.max(open, close) + Math.random() * (basePrice * 0.0001);
         const low = Math.min(open, close) - Math.random() * (basePrice * 0.0001);
-        candles1m.push({ open, high, low, close });
+        
+        const candleTime = new Date(istTimeFallback.getTime() - (80 - i) * 60 * 1000);
+        const timeStr = candleTime.toISOString().split('T')[0] + 'T' + 
+                        String(candleTime.getHours()).padStart(2, '0') + ':' + 
+                        String(candleTime.getMinutes()).padStart(2, '0') + ':00';
+
+        candles1m.push({ time: timeStr, open, high, low, close });
     }
     marketState[symbol].history1m = history1m;
     marketState[symbol].candles1m = candles1m;
@@ -3624,6 +3635,10 @@ function seedMock1mHistory(symbol) {
     const history1m = [];
     const candles1m = [];
     let tempPrice = basePrice;
+    const nowTimeMock = new Date();
+    const utcTimeMock = nowTimeMock.getTime() + (nowTimeMock.getTimezoneOffset() * 60000);
+    const istTimeMock = new Date(utcTimeMock + (3600000 * 5.5));
+
     for (let i = 0; i < 80; i++) {
         const prevPrice = tempPrice;
         tempPrice += (Math.random() - 0.5) * (basePrice * 0.0001);
@@ -3633,7 +3648,13 @@ function seedMock1mHistory(symbol) {
         const close = tempPrice;
         const high = Math.max(open, close) + Math.random() * (basePrice * 0.0001);
         const low = Math.min(open, close) - Math.random() * (basePrice * 0.0001);
-        candles1m.push({ open, high, low, close });
+
+        const candleTime = new Date(istTimeMock.getTime() - (80 - i) * 60 * 1000);
+        const timeStr = candleTime.toISOString().split('T')[0] + 'T' + 
+                        String(candleTime.getHours()).padStart(2, '0') + ':' + 
+                        String(candleTime.getMinutes()).padStart(2, '0') + ':00';
+
+        candles1m.push({ time: timeStr, open, high, low, close });
     }
     marketState[symbol].history1m = history1m;
     marketState[symbol].candles1m = candles1m;
@@ -3822,8 +3843,22 @@ const globalUpdateInterval = setInterval(async () => {
             const highVal1m = curState.currentCandleHigh1m;
             const lowVal1m = curState.currentCandleLow1m;
             const closeVal1m = price;
+            
+            const nowTimeLive = new Date();
+            const utcTimeLive = nowTimeLive.getTime() + (nowTimeLive.getTimezoneOffset() * 60000);
+            const istTimeLive = new Date(utcTimeLive + (3600000 * 5.5));
+            const timeStrLive = istTimeLive.toISOString().split('T')[0] + 'T' + 
+                                String(istTimeLive.getHours()).padStart(2, '0') + ':' + 
+                                String(istTimeLive.getMinutes()).padStart(2, '0') + ':00';
+
             curState.candles1m = curState.candles1m || [];
-            curState.candles1m.push({ open: openVal1m, high: highVal1m, low: lowVal1m, close: closeVal1m });
+            curState.candles1m.push({ 
+                time: timeStrLive,
+                open: openVal1m, 
+                high: highVal1m, 
+                low: lowVal1m, 
+                close: closeVal1m 
+            });
             if (curState.candles1m.length > 100) {
                 curState.candles1m.shift();
             }
@@ -3984,9 +4019,26 @@ const globalUpdateInterval = setInterval(async () => {
         
         if (isMorningWindow && curState.candles1m && curState.candles1m.length >= 1) {
             if (curState.firstCandle1mHigh === null) {
-                curState.firstCandle1mHigh = curState.candles1m[0].high;
-                curState.firstCandle1mLow = curState.candles1m[0].low;
-                console.log(`[Morning Scalper] ${symbol} Range set: High = ${curState.firstCandle1mHigh}, Low = ${curState.firstCandle1mLow}`);
+                const todayPrefix = ist.toISOString().split('T')[0]; // e.g. "2026-07-15"
+                const targetTimeStr = `${todayPrefix}T09:15`;
+                
+                const targetCandle = curState.candles1m.find(c => c.time && c.time.startsWith(targetTimeStr));
+                
+                if (targetCandle) {
+                    curState.firstCandle1mHigh = targetCandle.high;
+                    curState.firstCandle1mLow = targetCandle.low;
+                    console.log(`[Morning Scalper] ${symbol} Range set successfully: High = ${curState.firstCandle1mHigh}, Low = ${curState.firstCandle1mLow} (Time: ${targetCandle.time})`);
+                } else {
+                    const todayCandles = curState.candles1m.filter(c => c.time && c.time.startsWith(todayPrefix));
+                    if (todayCandles.length > 0) {
+                        const firstToday = todayCandles[0];
+                        curState.firstCandle1mHigh = firstToday.high;
+                        curState.firstCandle1mLow = firstToday.low;
+                        console.log(`[Morning Scalper] ${symbol} Range set using first available candle of today: High = ${curState.firstCandle1mHigh}, Low = ${curState.firstCandle1mLow} (Time: ${firstToday.time})`);
+                    } else {
+                        console.log(`[Morning Scalper] ${symbol} Waiting for today's first 9:15 candle to arrive...`);
+                    }
+                }
             }
             
             if (curState.firstCandle1mHigh !== null && curState.history1m.length >= 9) {
