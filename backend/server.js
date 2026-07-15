@@ -3983,13 +3983,13 @@ const globalUpdateInterval = setInterval(async () => {
                         signal5ema = "BUY (5EMA Breakout)";
                         const rawSl = ((price - curState.nifty5emaSlLevel) / price) * 100;
                         slPct5ema = Math.max(8, Math.min(20, rawSl * 0.52));
-                        targetPct5ema = slPct5ema * 2.5; // 1:2.5 RR
+                        targetPct5ema = slPct5ema * 1.5; // 1:1.5 RR (easier to hit, higher win-rate)
                         curState.nifty5emaCeAlert = false; // fire once only
                     } else if (curState.nifty5emaPeAlert) {
                         signal5ema = "SELL (5EMA Breakdown)";
                         const rawSl = ((curState.nifty5emaSlLevel - price) / price) * 100;
                         slPct5ema = Math.max(8, Math.min(20, rawSl * 0.52));
-                        targetPct5ema = slPct5ema * 2.5; // 1:2.5 RR
+                        targetPct5ema = slPct5ema * 1.5; // 1:1.5 RR (easier to hit, higher win-rate)
                         curState.nifty5emaPeAlert = false; // fire once only
                     }
                 }
