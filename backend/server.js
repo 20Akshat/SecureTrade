@@ -4042,10 +4042,8 @@ const globalUpdateInterval = setInterval(async () => {
             }
             
             if (curState.firstCandle1mHigh !== null && curState.history1m.length >= 9) {
-                const ema3Arr = calculateEMA(curState.history1m, 3);
-                const ema9Arr = calculateEMA(curState.history1m, 9);
-                const ema3 = ema3Arr[ema3Arr.length - 1];
-                const ema9 = ema9Arr[ema9Arr.length - 1];
+                const ema3 = calculateEMA(curState.history1m, 3);
+                const ema9 = calculateEMA(curState.history1m, 9);
                 
                 if (symbol === "NIFTY50") {
                     // Nifty50: Standard 1-min Breakout
