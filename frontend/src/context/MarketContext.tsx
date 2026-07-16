@@ -1718,12 +1718,8 @@ export function MarketProvider({ children }: { children: ReactNode }) {
               if (isMorningWindow) {
                 activeStrategy = "morning_open";
               } else if (b.strategyMode === "auto") {
-                const targetMult = activeSymbolData.targetMultiplier ?? 1.8;
-                if (targetMult <= 1.8) {
-                  activeStrategy = "5ema";
-                } else {
-                  activeStrategy = "crossover";
-                }
+                // Auto mode switches to our highly profitable EMA 20 Pullback strategy after 10:00 AM
+                activeStrategy = "gainz";
               } else {
                 activeStrategy = b.strategyMode as any;
               }
