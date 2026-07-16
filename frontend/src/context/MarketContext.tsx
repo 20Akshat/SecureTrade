@@ -2118,8 +2118,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                 // Get active normal positions count
                 const activeNormalCount = (b.hasPosition ? 1 : 0) + (b.hasSecondPosition ? 1 : 0);
 
-                const isSecondPosAllowed = (!hasPositionOnThisIndex && activeNormalCount < 2) || 
-                                           (hasPositionOnThisIndex && !b.hasSecondPosition && (Date.now() - b.entryTime > 15 * 60 * 1000) && currentDirection === (b.isShort ? "PE" : "CE"));
+                const isSecondPosAllowed = (activeNormalCount < 1);
 
                 if (!isReEntry && balanceRef.current >= minCost && isSecondPosAllowed) {
                   gotNormal = true;
