@@ -3352,45 +3352,53 @@ function calculateATR(candles, period = 14) {
 
 function generateSignalGainz(rsi, prices, symbol) {
     if (prices.length < 50) return "WAIT";
+    
     const ema9  = calculateEMA(prices, 9);
+    const ema20 = calculateEMA(prices, 20); // 20 EMA is our dynamic VWAP proxy
     const ema21 = calculateEMA(prices, 21);
     const ema50 = calculateEMA(prices, 50);
+
+    const currentClose = prices[prices.length - 1];
+    const prevClose = prices[prices.length - 2];
     
-    // Check if it's the morning session (9:15 - 10:00 AM IST) to bypass trend filtering
+    const currentEma9 = ema9[ema9.length - 1];
+    const prevEma9 = ema9[ema9.length - 2];
+    const currentEma20 = ema20[ema20.length - 1];
+    const currentEma21 = ema21[ema21.length - 1];
+    const currentEma50 = ema50[ema50.length - 1];
+
     const d = new Date();
     const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
     const ist = new Date(utc + (3600000 * 5.5));
     const timeVal = ist.getHours() * 100 + ist.getMinutes();
-    const isMorning = timeVal >= 915 && timeVal <= 1000;
     
-    const currentClose = prices[prices.length - 1];
+    // We only execute trend pullback after morning rush (10:00 - 15:15)
+    if (timeVal < 1000 || timeVal > 1515) return "WAIT";
 
-    // ── STRONG TREND FILTER ──
-    // After 10:00 AM: price must be on the correct side of EMA50
-    // AND EMA9 must be above/below EMA21 (confirming direction)
-    // Morning session bypasses this for fast ORB-style entries
-    const isBullishTrend = isMorning
-        ? true
-        : (ema9 > ema50 && ema9 > ema21 && currentClose > ema50);
+    // ── TRENDING REGIME FILTER (9, 21, 50 EMA alignment) ──
+    const isBullishTrend = (currentEma9 > currentEma21 && currentEma21 > currentEma50);
+    const isBearishTrend = (currentEma9 < currentEma21 && currentEma21 < currentEma50);
 
-    const isBearishTrend = isMorning
-        ? true
-        : (ema9 < ema50 && ema9 < ema21 && currentClose < ema50);
-    
-    const prevClose = prices[prices.length - 2];
-    const prevPrices = prices.slice(0, prices.length - 1);
-    const prevEma9 = calculateEMA(prevPrices, 9);
-    
-    const isBullishBreakout = (prevClose <= prevEma9) && (currentClose > ema9) && isBullishTrend;
-    const isBearishBreakout = (prevClose >= prevEma9) && (currentClose < ema9) && isBearishTrend;
-    
-    // Tightened RSI bounds: >48 for buy (avoid choppy mid-zone), <52 for sell
-    if (isBullishBreakout && rsi > 48) {
-        return "BUY (Gainz Breakout)";
+    if (isBullishTrend) {
+        // Bullish Pullback: Price is close to EMA 20 (within 0.15%)
+        const isNearEma20 = Math.abs(currentClose - currentEma20) / currentClose < 0.0015;
+        // Trigger: Crosses back above EMA 9
+        const crossesAboveEma9 = (prevClose <= prevEma9) && (currentClose > currentEma9);
+        if (isNearEma20 && crossesAboveEma9 && rsi > 48) {
+            return "BUY (EMA Pullback)";
+        }
     }
-    if (isBearishBreakout && rsi < 52) {
-        return "SELL (Gainz Breakdown)";
+
+    if (isBearishTrend) {
+        // Bearish Pullback: Price is close to EMA 20 (within 0.15%)
+        const isNearEma20 = Math.abs(currentClose - currentEma20) / currentClose < 0.0015;
+        // Trigger: Crosses back below EMA 9
+        const crossesBelowEma9 = (prevClose >= prevEma9) && (currentClose < currentEma9);
+        if (isNearEma20 && crossesBelowEma9 && rsi < 52) {
+            return "SELL (EMA Pullback)";
+        }
     }
+
     return "WAIT";
 }
 

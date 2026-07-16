@@ -801,7 +801,7 @@ export default function DashboardPage() {
           </button>
           {isAutoTradeActive && (
             <div className="bg-slate-100 border border-slate-200 rounded-xl px-3 py-1.5 shadow-inner text-[10px] font-black text-slate-700">
-              🤖 AI Active Strategy: {strategyMode === "crossover" ? "📈 EMA Crossover (Trend)" : (strategyMode === "gainz" ? "⚡ Gainz (Breakout)" : "🕯️ 5EMA (Volatility)")}
+              🤖 AI Active Strategy: {strategyMode === "crossover" ? "📈 EMA Crossover (Trend)" : (strategyMode === "gainz" ? "🚀 EMA Pullback (Trend)" : "🕯️ 5EMA (Volatility)")}
             </div>
           )}
           {isAutoTradeActive && (
@@ -826,7 +826,7 @@ export default function DashboardPage() {
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                ⚡ Gainz Bot
+                🚀 Pullback Bot
               </button>
             </div>
           )}
