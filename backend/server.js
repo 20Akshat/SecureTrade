@@ -2158,7 +2158,10 @@ app.post('/api/options-chain/quotes', async (req, res) => {
                             'Accept': 'application/json',
                             'X-UserType': 'USER',
                             'X-SourceID': 'WEB',
-                            'X-PrivateKey': process.env.ANGEL_API_KEY
+                            'X-PrivateKey': process.env.ANGEL_API_KEY,
+                            'X-ClientLocalIP': '192.168.1.1',
+                            'X-ClientPublicIP': '106.202.70.114',
+                            'X-MACAddress': '00:00:00:00:00:00'
                         },
                         signal: controller.signal
                     });
@@ -2851,7 +2854,10 @@ async function fetchAndCacheOptionPrices(tokensNFO, tokensBFO) {
                     'Accept': 'application/json',
                     'X-UserType': 'USER',
                     'X-SourceID': 'WEB',
-                    'X-PrivateKey': process.env.ANGEL_API_KEY
+                    'X-PrivateKey': process.env.ANGEL_API_KEY,
+                    'X-ClientLocalIP': '192.168.1.1',
+                    'X-ClientPublicIP': '106.202.70.114',
+                    'X-MACAddress': '00:00:00:00:00:00'
                 },
                 signal: controller.signal
             });
@@ -3013,7 +3019,10 @@ async function getLivePriceForSymbol(symbol, forceFresh = false) {
                 'Accept': 'application/json',
                 'X-UserType': 'USER',
                 'X-SourceID': 'WEB',
-                'X-PrivateKey': process.env.ANGEL_API_KEY
+                'X-PrivateKey': process.env.ANGEL_API_KEY,
+                'X-ClientLocalIP': '192.168.1.1',
+                'X-ClientPublicIP': '106.202.70.114',
+                'X-MACAddress': '00:00:00:00:00:00'
             },
             signal: controller.signal
         });
@@ -3212,7 +3221,10 @@ async function fetchAngelPrices() {
                 'Accept': 'application/json',
                 'X-UserType': 'USER',
                 'X-SourceID': 'WEB',
-                'X-PrivateKey': process.env.ANGEL_API_KEY
+                'X-PrivateKey': process.env.ANGEL_API_KEY,
+                'X-ClientLocalIP': '192.168.1.1',
+                'X-ClientPublicIP': '106.202.70.114',
+                'X-MACAddress': '00:00:00:00:00:00'
             },
             signal: controller.signal
         });
