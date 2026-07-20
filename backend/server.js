@@ -3350,7 +3350,7 @@ function calculateATR(candles, period = 14) {
     return trs.reduce((a, b) => a + b, 0) / trs.length;
 }
 
-function generateSignalGainz(rsi, prices, symbol) {
+function generateSignalGainz(rsi, prices, symbol, candles = []) {
     if (prices.length < 50) return "WAIT";
     
     const ema9  = calculateEMA(prices, 9);
@@ -3360,6 +3360,12 @@ function generateSignalGainz(rsi, prices, symbol) {
 
     const currentClose = prices[prices.length - 1];
     const prevClose = prices[prices.length - 2];
+    
+    const currentLow = candles && candles.length >= 1 ? candles[candles.length - 1].low : currentClose;
+    const prevLow = candles && candles.length >= 2 ? candles[candles.length - 2].low : prevClose;
+
+    const currentHigh = candles && candles.length >= 1 ? candles[candles.length - 1].high : currentClose;
+    const prevHigh = candles && candles.length >= 2 ? candles[candles.length - 2].high : prevClose;
     
     const currentEma9 = ema9[ema9.length - 1];
     const prevEma9 = ema9[ema9.length - 2];
@@ -3384,9 +3390,10 @@ function generateSignalGainz(rsi, prices, symbol) {
         const isNearSupport = (Math.abs(currentClose - currentEma20) / currentClose < 0.0028) ||
                               (Math.abs(currentClose - currentEma21) / currentClose < 0.0022) ||
                               (Math.abs(prevClose - prevEma9) / prevClose < 0.0018) ||
-                              (prices[prices.length - 2] <= prevEma9);
-        // Trigger: Crosses back or rebounds/bounces above EMA 9
-        const isBounceOrCross = (prevClose <= prevEma9) || (prices[prices.length - 2] <= prevEma9) || (currentClose <= currentEma9);
+                              (prevLow <= prevEma9) ||
+                              (currentLow <= currentEma9);
+        // Trigger: Crosses back or rebounds/bounces above EMA 9 (including wick dips)
+        const isBounceOrCross = (prevClose <= prevEma9) || (prevLow <= prevEma9) || (currentClose <= currentEma9) || (currentLow <= currentEma9);
         const isValidRebound = isBounceOrCross && (currentClose > currentEma9);
         if (isNearSupport && isValidRebound && rsi > 46) {
             return "BUY (EMA Pullback)";
@@ -3398,9 +3405,10 @@ function generateSignalGainz(rsi, prices, symbol) {
         const isNearResistance = (Math.abs(currentClose - currentEma20) / currentClose < 0.0028) ||
                                 (Math.abs(currentClose - currentEma21) / currentClose < 0.0022) ||
                                 (Math.abs(prevClose - prevEma9) / prevClose < 0.0018) ||
-                                (prices[prices.length - 2] >= prevEma9);
-        // Trigger: Crosses back or rejects below EMA 9
-        const isRejectionOrCross = (prevClose >= prevEma9) || (prices[prices.length - 2] >= prevEma9) || (currentClose >= currentEma9);
+                                (prevHigh >= prevEma9) ||
+                                (currentHigh >= currentEma9);
+        // Trigger: Crosses back or rejects below EMA 9 (including wick touches)
+        const isRejectionOrCross = (prevClose >= prevEma9) || (prevHigh >= prevEma9) || (currentClose >= currentEma9) || (currentHigh >= currentEma9);
         const isValidDrop = isRejectionOrCross && (currentClose < currentEma9);
         if (isNearResistance && isValidDrop && rsi < 54) {
             return "SELL (EMA Pullback)";
