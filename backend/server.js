@@ -3817,18 +3817,28 @@ const globalUpdateInterval = setInterval(async () => {
         }
         marketState[symbol].currentPrice = price;
         
+        // Calculate current IST time & minute blocks for clock-precise candle boundaries
+        const nowTimeLive = new Date();
+        const utcTimeLive = nowTimeLive.getTime() + (nowTimeLive.getTimezoneOffset() * 60000);
+        const istTimeLive = new Date(utcTimeLive + (3600000 * 5.5));
+        const currentMinute = istTimeLive.getMinutes();
+        const current5mBlock = Math.floor(currentMinute / 5);
+
         const curState = marketState[symbol];
-        curState.tickCount = (curState.tickCount || 0) + 1;
         
         if (curState.currentCandleOpen === undefined) {
             curState.currentCandleOpen = price;
             curState.currentCandleHigh = price;
             curState.currentCandleLow = price;
+            curState.last5mBlock = current5mBlock;
         }
         curState.currentCandleHigh = Math.max(curState.currentCandleHigh, price);
         curState.currentCandleLow = Math.min(curState.currentCandleLow, price);
         
-        if (curState.tickCount >= 300 || curState.history.length === 0) {
+        const isNew5mCandle = curState.history.length === 0 || (curState.last5mBlock !== undefined && curState.last5mBlock !== current5mBlock);
+        
+        if (isNew5mCandle) {
+            curState.last5mBlock = current5mBlock;
             curState.history.push(price);
             if (curState.history.length > 100) {
                 curState.history.shift();
@@ -3848,20 +3858,24 @@ const globalUpdateInterval = setInterval(async () => {
             curState.currentCandleHigh = price;
             curState.currentCandleLow = price;
             curState.tickCount = 0;
-
+        } else {
+            curState.tickCount = (curState.tickCount || 0) + 1;
         }
 
         // ── 1-MINUTE CANDLE BUILDER ──
-        curState.tickCount1m = (curState.tickCount1m || 0) + 1;
         if (curState.currentCandleOpen1m === undefined) {
             curState.currentCandleOpen1m = price;
             curState.currentCandleHigh1m = price;
             curState.currentCandleLow1m = price;
+            curState.last1mMinute = currentMinute;
         }
         curState.currentCandleHigh1m = Math.max(curState.currentCandleHigh1m, price);
         curState.currentCandleLow1m = Math.min(curState.currentCandleLow1m, price);
         
-        if (curState.tickCount1m >= 60 || curState.history1m.length === 0) {
+        const isNew1mCandle = curState.history1m.length === 0 || (curState.last1mMinute !== undefined && curState.last1mMinute !== currentMinute);
+        
+        if (isNew1mCandle) {
+            curState.last1mMinute = currentMinute;
             curState.history1m.push(price);
             if (curState.history1m.length > 100) {
                 curState.history1m.shift();
@@ -3872,9 +3886,6 @@ const globalUpdateInterval = setInterval(async () => {
             const lowVal1m = curState.currentCandleLow1m;
             const closeVal1m = price;
             
-            const nowTimeLive = new Date();
-            const utcTimeLive = nowTimeLive.getTime() + (nowTimeLive.getTimezoneOffset() * 60000);
-            const istTimeLive = new Date(utcTimeLive + (3600000 * 5.5));
             const timeStrLive = istTimeLive.toISOString().split('T')[0] + 'T' + 
                                 String(istTimeLive.getHours()).padStart(2, '0') + ':' + 
                                 String(istTimeLive.getMinutes()).padStart(2, '0') + ':00';
@@ -3895,6 +3906,8 @@ const globalUpdateInterval = setInterval(async () => {
             curState.currentCandleHigh1m = price;
             curState.currentCandleLow1m = price;
             curState.tickCount1m = 0;
+        } else {
+            curState.tickCount1m = (curState.tickCount1m || 0) + 1;
         }
         
         const activeHistory = [...curState.history, price];
