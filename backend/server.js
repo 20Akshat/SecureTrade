@@ -3383,10 +3383,12 @@ function generateSignalGainz(rsi, prices, symbol) {
         // Support Check: Price is near EMA 20 OR near EMA 21 / EMA 9 fast momentum zone
         const isNearSupport = (Math.abs(currentClose - currentEma20) / currentClose < 0.0028) ||
                               (Math.abs(currentClose - currentEma21) / currentClose < 0.0022) ||
-                              (Math.abs(prevClose - prevEma9) / prevClose < 0.0018);
-        // Trigger: Crosses back or bounces above EMA 9
-        const crossesAboveEma9 = (prevClose <= prevEma9) && (currentClose > currentEma9);
-        if (isNearSupport && crossesAboveEma9 && rsi > 46) {
+                              (Math.abs(prevClose - prevEma9) / prevClose < 0.0018) ||
+                              (prices[prices.length - 2] <= prevEma9);
+        // Trigger: Crosses back or rebounds/bounces above EMA 9
+        const isBounceOrCross = (prevClose <= prevEma9) || (prices[prices.length - 2] <= prevEma9) || (currentClose <= currentEma9);
+        const isValidRebound = isBounceOrCross && (currentClose > currentEma9);
+        if (isNearSupport && isValidRebound && rsi > 46) {
             return "BUY (EMA Pullback)";
         }
     }
@@ -3395,10 +3397,12 @@ function generateSignalGainz(rsi, prices, symbol) {
         // Resistance Check: Price is near EMA 20 OR near EMA 21 / EMA 9 fast momentum zone
         const isNearResistance = (Math.abs(currentClose - currentEma20) / currentClose < 0.0028) ||
                                 (Math.abs(currentClose - currentEma21) / currentClose < 0.0022) ||
-                                (Math.abs(prevClose - prevEma9) / prevClose < 0.0018);
-        // Trigger: Crosses back or bounces below EMA 9
-        const crossesBelowEma9 = (prevClose >= prevEma9) && (currentClose < currentEma9);
-        if (isNearResistance && crossesBelowEma9 && rsi < 54) {
+                                (Math.abs(prevClose - prevEma9) / prevClose < 0.0018) ||
+                                (prices[prices.length - 2] >= prevEma9);
+        // Trigger: Crosses back or rejects below EMA 9
+        const isRejectionOrCross = (prevClose >= prevEma9) || (prices[prices.length - 2] >= prevEma9) || (currentClose >= currentEma9);
+        const isValidDrop = isRejectionOrCross && (currentClose < currentEma9);
+        if (isNearResistance && isValidDrop && rsi < 54) {
             return "SELL (EMA Pullback)";
         }
     }
