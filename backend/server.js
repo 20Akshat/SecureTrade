@@ -3380,21 +3380,25 @@ function generateSignalGainz(rsi, prices, symbol) {
     const isBearishTrend = (currentEma9 < currentEma21 && currentEma21 < currentEma50);
 
     if (isBullishTrend) {
-        // Bullish Pullback: Price is close to EMA 20 (within 0.15%)
-        const isNearEma20 = Math.abs(currentClose - currentEma20) / currentClose < 0.0015;
-        // Trigger: Crosses back above EMA 9
+        // Support Check: Price is near EMA 20 OR near EMA 21 / EMA 9 fast momentum zone
+        const isNearSupport = (Math.abs(currentClose - currentEma20) / currentClose < 0.0028) ||
+                              (Math.abs(currentClose - currentEma21) / currentClose < 0.0022) ||
+                              (Math.abs(prevClose - prevEma9) / prevClose < 0.0018);
+        // Trigger: Crosses back or bounces above EMA 9
         const crossesAboveEma9 = (prevClose <= prevEma9) && (currentClose > currentEma9);
-        if (isNearEma20 && crossesAboveEma9 && rsi > 48) {
+        if (isNearSupport && crossesAboveEma9 && rsi > 46) {
             return "BUY (EMA Pullback)";
         }
     }
 
     if (isBearishTrend) {
-        // Bearish Pullback: Price is close to EMA 20 (within 0.15%)
-        const isNearEma20 = Math.abs(currentClose - currentEma20) / currentClose < 0.0015;
-        // Trigger: Crosses back below EMA 9
+        // Resistance Check: Price is near EMA 20 OR near EMA 21 / EMA 9 fast momentum zone
+        const isNearResistance = (Math.abs(currentClose - currentEma20) / currentClose < 0.0028) ||
+                                (Math.abs(currentClose - currentEma21) / currentClose < 0.0022) ||
+                                (Math.abs(prevClose - prevEma9) / prevClose < 0.0018);
+        // Trigger: Crosses back or bounces below EMA 9
         const crossesBelowEma9 = (prevClose >= prevEma9) && (currentClose < currentEma9);
-        if (isNearEma20 && crossesBelowEma9 && rsi < 52) {
+        if (isNearResistance && crossesBelowEma9 && rsi < 54) {
             return "SELL (EMA Pullback)";
         }
     }
