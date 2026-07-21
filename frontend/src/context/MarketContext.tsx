@@ -1641,11 +1641,12 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                       }
                     } catch {}
 
-                    if (!optionLtpOk) {
+                    if (!optionLtpOk && !isMarketOpen) {
                       currentPremium = calcPremium(spot, currentStrike, dte, isCall, config.iv);
+                      optionLtpOk = true;
                     }
 
-                    if (currentPremium >= 5 && currentPremium <= 25) {
+                    if (optionLtpOk && currentPremium >= 5 && currentPremium <= 25) {
                       foundStrike = currentStrike;
                       foundPremium = currentPremium;
                       foundSym = currentSym;
