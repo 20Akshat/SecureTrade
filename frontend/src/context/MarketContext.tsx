@@ -97,13 +97,23 @@ function parseDteFromSymbol(symbol: string): number {
   const typeIdx = parts.findIndex(p => p === "CE" || p === "PE");
   if (typeIdx === -1) return 0.001;
   
-  const dateParts = parts.slice(1, typeIdx - 1);
-  const dateStr = dateParts.join(" ");
-  
-  const expiryDate = new Date(dateStr);
-  if (isNaN(expiryDate.getTime())) return 0.001;
-  
-  const expiryTime = new Date(expiryDate.getFullYear(), expiryDate.getMonth(), expiryDate.getDate(), 15, 30, 0);
+  const rawDateStr = parts.slice(1, typeIdx - 1).join("").toUpperCase();
+  const match = rawDateStr.match(/^(\d{1,2})([A-Z]{3})(\d{2,4})$/);
+  if (!match) return 0.001;
+
+  const day = parseInt(match[1], 10);
+  const monthStr = match[2];
+  let year = parseInt(match[3], 10);
+  if (year < 100) year += 2000;
+
+  const months: Record<string, number> = {
+    JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+    JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11
+  };
+  const month = months[monthStr];
+  if (month === undefined) return 0.001;
+
+  const expiryTime = new Date(year, month, day, 15, 30, 0);
   const today = new Date();
   
   const diffMs = expiryTime.getTime() - today.getTime();
@@ -268,8 +278,25 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   const { token, updateBalance, balance } = useAuth();
   const [marketData, setMarketData] = useState<Record<string, MarketData>>({});
   const [selectedSymbol, setSelectedSymbol] = useState("NIFTY50");
-  const [isAutoTradeActive, setIsAutoTradeActive] = useState(false);
-  const [botStatus, setBotStatus] = useState("⭕ Bot is OFF");
+  const [isAutoTradeActive, setIsAutoTradeActive] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("st_auto_trade_active");
+      return saved !== null ? JSON.parse(saved) : true; // Default Auto-Trade to ON so bot auto-runs
+    }
+    return true;
+  });
+  const [botStatus, setBotStatus] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("st_auto_trade_active");
+      const active = saved !== null ? JSON.parse(saved) : true;
+      return active ? "🟢 Bot Active - Scanning market..." : "⭕ Bot is OFF";
+    }
+    return "🟢 Bot Active - Scanning market...";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("st_auto_trade_active", JSON.stringify(isAutoTradeActive));
+  }, [isAutoTradeActive]);
   const [botNotification, setBotNotification] = useState<BotNotification | null>(null);
   const [botMaxLots, setBotMaxLots] = useState(1);
   const [botMaxPremium, setBotMaxPremium] = useState(250); // Default to ₹250
@@ -1275,9 +1302,14 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                   targetHit = isBotTrade && pnlPercent >= maxTarget;
                 }
 
-                if (targetHit || slHit) {
+                // 3:15 PM Auto Intraday Square-off check:
+                const nowTime = new Date();
+                const isSquareOffTime = (nowTime.getHours() > 15) || (nowTime.getHours() === 15 && nowTime.getMinutes() >= 15);
+
+                if (targetHit || slHit || isSquareOffTime) {
                   const isTarget = targetHit;
-                  setBotStatus(`${isTarget ? "🎯 Target" : "🚨 Stop-Loss"} Hit! Selling ${t.symbol} @ ₹${currentPremium.toFixed(2)} (${pnlPercent >= 0 ? "+" : ""}${pnlPercent.toFixed(1)}%)`);
+                  const exitReason = isSquareOffTime && !targetHit && !slHit ? "⏰ 3:15 PM Square-off" : isTarget ? "🎯 Target" : "🚨 Stop-Loss";
+                  setBotStatus(`${exitReason} Hit! Selling ${t.symbol} @ ₹${currentPremium.toFixed(2)} (${pnlPercent >= 0 ? "+" : ""}${pnlPercent.toFixed(1)}%)`);
                   
                   // SYNCHRONOUSLY CLEAR POSITION STATE TO PREVENT WEB SOCKET TICK RACE CONDITIONS
                   if (t.id === 1) {
@@ -1456,8 +1488,8 @@ export function MarketProvider({ children }: { children: ReactNode }) {
               const zhMsSinceEntry = Date.now() - b.zhEntryTime;
               if (zhMsSinceEntry < 10000) return;
 
-              // 🛡️ GLITCH GUARD: Sanity check - reject impossible price spikes for ZH
-              if (currentPremium > b.zhEntryPrice * 3.0 || currentPremium < b.zhEntryPrice * 0.1) {
+              // 🛡️ GLITCH GUARD: Sanity check - allow up to 15.0x (+1400%) profit spikes without rejection
+              if (currentPremium > b.zhEntryPrice * 15.0 || currentPremium < b.zhEntryPrice * 0.05) {
                 console.warn(`🚨 [ZH Glitch Guard] Suspicious price ₹${currentPremium.toFixed(2)} rejected for ${b.zhEntrySymbol} (entry ₹${b.zhEntryPrice.toFixed(2)}). Skipping ZH target/SL check.`);
                 return;
               }
@@ -1466,7 +1498,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                 if (!b.hasZeroHeroPosition || b.zhEntryPrice <= 0) return;
                 const pnlPercent = ((currentPremium - b.zhEntryPrice) / b.zhEntryPrice) * 100;
 
-                                const closePosition = async () => {
+                const closePosition = async () => {
                   try {
                     const totalShares = b.zhMaxLots * posConfig.lotSize;
                     const endpoint = "sell"; // Always sell to close options
@@ -1488,7 +1520,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                   }
                 };
 
-                const maxTarget = b.zhTargetPct || 55;
+                const maxTarget = b.zhTargetPct || 150;
                 const maxSl = b.zhSlPct || 80;
                 
                 let userTargetPrice: number | null = null;
@@ -1508,6 +1540,12 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                 let targetHit = false;
                 let slHit = false;
 
+                // 🕒 3:30 PM (15:30 IST) Expiry Auto Square-off
+                const dNow = new Date();
+                const utcNow = dNow.getTime() + (dNow.getTimezoneOffset() * 60000);
+                const todayIST = new Date(utcNow + (3600000 * 5.5));
+                const is330Pm = (todayIST.getHours() * 100 + todayIST.getMinutes()) >= 1530;
+
                 // Both CE and PE are bought options, so Target is upward and SL is downward
                 if (userTargetPrice && userTargetPrice > 0) {
                   targetHit = currentPremium >= userTargetPrice;
@@ -1521,9 +1559,10 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                   slHit = pnlPercent <= -maxSl;
                 }
 
-                if (targetHit || slHit) {
+                if (targetHit || slHit || is330Pm) {
                   const isTarget = targetHit;
-                  setBotStatus(`⚡ Zero-Hero ${isTarget ? "🎯 Target" : "🚨 Stop-Loss"} Hit! Selling ${b.zhEntrySymbol} @ ₹${currentPremium.toFixed(2)} (${pnlPercent >= 0 ? "+" : ""}${pnlPercent.toFixed(1)}%)`);
+                  const reasonLabel = is330Pm ? "🕒 3:30 PM Expiry Auto Square-off" : (isTarget ? "🎯 Target" : "🚨 Stop-Loss");
+                  setBotStatus(`⚡ Zero-Hero ${reasonLabel} Hit! Selling ${b.zhEntrySymbol} @ ₹${currentPremium.toFixed(2)} (${pnlPercent >= 0 ? "+" : ""}${pnlPercent.toFixed(1)}%)`);
                   
                   // SYNCHRONOUSLY CLEAR STATE BEFORE AWAIT TO PREVENT WEB SOCKET TICK RACE CONDITIONS
                   b.hasZeroHeroPosition = false;
@@ -1536,10 +1575,10 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                   lastActionTime.current = Date.now();
                   
                   showBrowserNotification(
-                    `SecureTrade: ZH ${isTarget ? "🎯 Target Hit!" : "🚨 Stop-Loss Hit!"}`,
+                    `SecureTrade: ZH ${reasonLabel}`,
                     `Closed Zero-Hero ${b.zhEntrySymbol} @ ₹${currentPremium.toFixed(2)} (${pnlPercent >= 0 ? "+" : ""}${pnlPercent.toFixed(1)}%)`
                   );
-                  playVoiceAlert(isTarget ? "Target Hit! Target Hit!" : "Stop Loss Hit! Stop Loss Hit!");
+                  playVoiceAlert(is330Pm ? "Expiry Auto Square off!" : (isTarget ? "Target Hit! Target Hit!" : "Stop Loss Hit! Stop Loss Hit!"));
                   
                   setTimeout(() => { b.cooldown = false; }, 30000);
                 }
@@ -1584,7 +1623,15 @@ export function MarketProvider({ children }: { children: ReactNode }) {
               const minutes = today.getMinutes();
               const timeVal = hours * 100 + minutes;
 
-              const isTargetExpiryDay = (dayOfWeek === 4 && symToScan === "SENSEX") || (dayOfWeek === 2 && symToScan === "NIFTY50");
+              let isBankNiftyMonthlyExpiry = false;
+              if (dayOfWeek === 2 && symToScan === "BANKNIFTY") {
+                const nextWeek = new Date(today);
+                nextWeek.setDate(today.getDate() + 7);
+                isBankNiftyMonthlyExpiry = (nextWeek.getMonth() !== today.getMonth());
+              }
+              const isTargetExpiryDay = (dayOfWeek === 4 && symToScan === "SENSEX") || 
+                                        (dayOfWeek === 2 && symToScan === "NIFTY50") ||
+                                        isBankNiftyMonthlyExpiry;
               const isZHTime = isTargetExpiryDay && timeVal >= 1230;
 
               if (isZHTime) {
@@ -1596,16 +1643,16 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                 let currentDirection: "CE" | "PE" | null = null;
                 let currentReason = "";
 
-                if (ema9 !== undefined && ema21 !== undefined && prevEma9 !== undefined && prevEma21 !== undefined) {
-                  const isBullishCross = (prevEma9 <= prevEma21) && (ema9 > ema21);
-                  const isBearishCross = (prevEma9 >= prevEma21) && (ema9 < ema21);
+                if (ema9 !== undefined && ema21 !== undefined) {
+                  const isBullishTrend = (ema9 > ema21) && (rsi > 52);
+                  const isBearishTrend = (ema9 < ema21) && (rsi < 48);
 
-                  if (isBullishCross && rsi > 52) {
+                  if (isBullishTrend) {
                     currentDirection = "CE";
-                    currentReason = `⚡ Expiry Day Special Zero-Hero CE Breakout! Index crossover (EMA9 ${ema9.toFixed(1)} > EMA21 ${ema21.toFixed(1)}) & RSI expanding (${rsi.toFixed(1)} > 52). 📈`;
-                  } else if (isBearishCross && rsi < 48) {
+                    currentReason = `⚡ Expiry Day Special Zero-Hero CE Breakout! Index momentum (EMA9 ${ema9.toFixed(1)} > EMA21 ${ema21.toFixed(1)}) & RSI expanding (${rsi.toFixed(1)} > 52). 📈`;
+                  } else if (isBearishTrend) {
                     currentDirection = "PE";
-                    currentReason = `⚡ Expiry Day Special Zero-Hero PE Breakdown! Index crossover (EMA9 ${ema9.toFixed(1)} < EMA21 ${ema21.toFixed(1)}) & RSI contracting (${rsi.toFixed(1)} < 48). 📉`;
+                    currentReason = `⚡ Expiry Day Special Zero-Hero PE Breakdown! Index momentum (EMA9 ${ema9.toFixed(1)} < EMA21 ${ema21.toFixed(1)}) & RSI contracting (${rsi.toFixed(1)} < 48). 📉`;
                   }
                 }
 
@@ -1613,7 +1660,11 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                   const isCall = currentDirection === "CE";
                   const expiryLabel = expiryDateForLabel.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" }).toUpperCase();
                   
-                  // OTM Strike scan for ₹5 to ₹25 premium sweet spot
+                  // Post 2:30 PM (timeVal >= 1430), pick ATM/Near-ITM options (₹15 - ₹60) to avoid OTM theta crash traps
+                  const minPrem = timeVal >= 1430 ? 15 : 5;
+                  const maxPrem = timeVal >= 1430 ? 60 : 25;
+
+                  // OTM Strike scan for premium sweet spot
                   const stepDirection = isCall ? 1 : -1;
                   let foundStrike = 0;
                   let foundPremium = 0;
@@ -1646,7 +1697,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                       optionLtpOk = true;
                     }
 
-                    if (optionLtpOk && currentPremium >= 5 && currentPremium <= 25) {
+                    if (optionLtpOk && currentPremium >= minPrem && currentPremium <= maxPrem) {
                       foundStrike = currentStrike;
                       foundPremium = currentPremium;
                       foundSym = currentSym;
