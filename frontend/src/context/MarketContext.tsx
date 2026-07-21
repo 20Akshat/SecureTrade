@@ -488,7 +488,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     zhEntryTime: 0,
     zhMaxLots: 1,
     zhIsShort: false,
-    zhTargetPct: 150,
+    zhTargetPct: 55,
     zhSlPct: 80,
     zhHasRecommendedAveraging: false,
   });
@@ -553,7 +553,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       const finalPrice = actualPrice || botNotification.premium;
       if (action === "BUY") {
         const config = SYMBOL_CONFIG[botNotification.symbol.split(" ")[0]] || SYMBOL_CONFIG.NIFTY50;
-        const targetPct = botNotification.targetPct || 150;
+        const targetPct = botNotification.targetPct || 55;
         const slPct = botNotification.slPct || 80;
         const targetPrice = finalPrice * (1 + targetPct / 100);
         const stopLossPrice = finalPrice * (1 - slPct / 100);
@@ -843,7 +843,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         b.zhIsShort = activeZhDbPos.symbol.endsWith("PE");
         b.zhHasRecommendedAveraging = false;
 
-        b.zhTargetPct = 150;
+        b.zhTargetPct = 55;
         b.zhSlPct = 80;
 
         const targetPrice = activeZhDbPos.take_profit ? Number(activeZhDbPos.take_profit) : (activeZhDbPos.averagePrice * (1 + b.zhTargetPct / 100));
@@ -1488,7 +1488,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                   }
                 };
 
-                const maxTarget = b.zhTargetPct || 150;
+                const maxTarget = b.zhTargetPct || 55;
                 const maxSl = b.zhSlPct || 80;
                 
                 let userTargetPrice: number | null = null;
@@ -1665,20 +1665,26 @@ export function MarketProvider({ children }: { children: ReactNode }) {
                       b.zhEntrySymbol = foundSym;
                       b.zhEntryPrice = foundPremium;
 
+                      const isHighSurety = (currentDirection === "CE" && rsi > 65) || (currentDirection === "PE" && rsi < 35);
+                      const zhTargetPct = isHighSurety ? 85 : 55;
+                      const zhReason = isHighSurety 
+                        ? `${currentReason} 🔥 HIGH SURETY SIGNAL (RSI ${rsi.toFixed(1)} Strong Momentum) - High Target 85%!`
+                        : currentReason;
+
                       setBotNotification({
                         id: Date.now().toString(),
                         symbol: foundSym,
                         type: currentDirection,
                         strike: foundStrike,
                         premium: foundPremium,
-                        reason: currentReason,
+                        reason: zhReason,
                         timestamp: new Date(),
-                        targetPct: 150,
+                        targetPct: zhTargetPct,
                         slPct: 80,
                         isZeroHero: true
                       });
-                      setBotStatus(`🔔 Zero-Hero Signal! ${currentDirection === "CE" ? "📈 BULLISH" : "📉 BEARISH"} - ${foundSym} @ ₹${foundPremium.toFixed(2)}`);
-                      showBrowserNotification("SecureTrade: Zero-Hero Trade Signal! 🚀", `Closed ${foundSym} @ ₹${foundPremium.toFixed(2)}`);
+                      setBotStatus(`🔔 Zero-Hero ${isHighSurety ? "🔥 HIGH SURETY " : ""}Signal! ${currentDirection === "CE" ? "📈 BULLISH" : "📉 BEARISH"} - ${foundSym} @ ₹${foundPremium.toFixed(2)} (Target: +${zhTargetPct}%)`);
+                      showBrowserNotification("SecureTrade: Zero-Hero Trade Signal! 🚀", `Closed ${foundSym} @ ₹${foundPremium.toFixed(2)} (Target: +${zhTargetPct}%)`);
                       playVoiceAlert("Trade! Trade! Trade!");
                     }
                   }

@@ -4128,7 +4128,7 @@ const globalUpdateInterval = setInterval(async () => {
             atr: atr.toFixed(2),
             signalGainz: curState.lastSignalGainz || "WAIT",
             signalMorning: curState.lastSignalMorning || "WAIT",
-            targetPctMorning: 55,
+            targetPctMorning: 15,
             slPctMorning: 15,
             targetMultiplier,
             slMultiplier
@@ -4196,7 +4196,7 @@ wss.on('connection', (ws) => {
             atr: atr.toFixed(2),
             signalGainz: curState.lastSignalGainz || "WAIT",
             signalMorning: curState.lastSignalMorning || "WAIT",
-            targetPctMorning: 55,
+            targetPctMorning: 15,
             slPctMorning: 15,
             targetMultiplier,
             slMultiplier
