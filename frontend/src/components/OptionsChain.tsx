@@ -87,9 +87,16 @@ function getWeeklyExpiries(symbol: string): { label: string; dte: number; type: 
     nextWeek.setDate(expiry.getDate() + 7);
     const isMonthly = nextWeek.getMonth() !== expiry.getMonth();
     
+    let dteVal = daysTo;
+    if (daysTo === 0) {
+      const expiryTime = new Date(expiry.getFullYear(), expiry.getMonth(), expiry.getDate(), 15, 30, 0);
+      const diffMs = expiryTime.getTime() - today.getTime();
+      dteVal = diffMs > 0 ? (diffMs / (1000 * 60 * 60 * 24)) : 0.001;
+    }
+
     expiries.push({
       label,
-      dte: Math.max(1, daysTo),
+      dte: Math.max(0.001, dteVal),
       type: isMonthly ? ("M" as const) : ("W" as const)
     });
   }
@@ -113,7 +120,7 @@ const stdNormalCDF = (x: number): number => {
 };
 
 function calcPremium(spot: number, strike: number, dte: number, isCall: boolean, iv: number): number {
-  const T = Math.max(dte, 0.5) / 365;
+  const T = Math.max(dte, 0.001) / 365;
   const sigma = iv;
   const r = 0.07; // 7% risk-free interest rate in India
   
