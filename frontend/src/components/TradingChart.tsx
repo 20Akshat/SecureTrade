@@ -505,7 +505,8 @@ export default function TradingChart({ customSymbol, onMarketUpdate }: TradingCh
     const mainLineSeries = chart.addSeries(LineSeries, {
       color: "#2563eb",
       lineWidth: 2,
-      priceLineVisible: true,
+      priceLineVisible: false,
+      lastValueVisible: false,
       visible: false
     });
     mainLineSeriesRef.current = mainLineSeries;
@@ -514,14 +515,16 @@ export default function TradingChart({ customSymbol, onMarketUpdate }: TradingCh
     const ma5 = chart.addSeries(LineSeries, { 
       color: "rgba(37, 99, 235, 0.45)", 
       lineWidth: 1,
-      priceLineVisible: false
+      priceLineVisible: false,
+      lastValueVisible: false
     });
     ma5SeriesRef.current = ma5;
 
     const ma20 = chart.addSeries(LineSeries, { 
       color: "rgba(249, 115, 22, 0.45)", 
       lineWidth: 1,
-      priceLineVisible: false
+      priceLineVisible: false,
+      lastValueVisible: false
     });
     ma20SeriesRef.current = ma20;
 
@@ -608,11 +611,11 @@ export default function TradingChart({ customSymbol, onMarketUpdate }: TradingCh
       }
 
       if (chartType === "line") {
-        candleSeriesRef.current.applyOptions({ visible: false });
-        if (mainLineSeriesRef.current) mainLineSeriesRef.current.applyOptions({ visible: true });
+        candleSeriesRef.current.applyOptions({ visible: false, lastValueVisible: false, priceLineVisible: false });
+        if (mainLineSeriesRef.current) mainLineSeriesRef.current.applyOptions({ visible: true, lastValueVisible: true, priceLineVisible: true });
       } else {
-        if (mainLineSeriesRef.current) mainLineSeriesRef.current.applyOptions({ visible: false });
-        candleSeriesRef.current.applyOptions({ visible: true });
+        if (mainLineSeriesRef.current) mainLineSeriesRef.current.applyOptions({ visible: false, lastValueVisible: false, priceLineVisible: false });
+        candleSeriesRef.current.applyOptions({ visible: true, lastValueVisible: true, priceLineVisible: true });
         
         if (chartType === "hollow") {
           candleSeriesRef.current.applyOptions({
