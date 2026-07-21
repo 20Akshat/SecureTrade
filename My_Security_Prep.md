@@ -359,8 +359,142 @@ Bhai, yahan hum apne live hacking labs ka record aur steps note karte chalenge t
 
 
 
+---
 
+# 🗄️ Lesson 6: DBMS — Keys, Data Types & Basic Queries
 
+---
+
+## 🔑 PART 1: KEYS
+
+### KEY kya hota hai?
+Kisi bhi row ko uniquely pehchanne wali cheez = KEY!
+*(Jaise Roll No se exact ek student pehchan sakte hain!)*
+
+### 5 Types of Keys:
+
+| Key | Definition | Example |
+|-----|-----------|---------|
+| **Super Key** | Koi bhi unique combination | {Roll_No}, {Email}, {Roll_No, Name} |
+| **Candidate Key** | Minimum Super Key (extra columns nahi) | {Roll_No}, {Email}, {Phone} |
+| **Primary Key** | Chosen Candidate Key — NULL nahi, Duplicate nahi, SIRF EK | Roll_No = PRIMARY KEY |
+| **Foreign Key** | Doosre table ki PK refer karta hai — value exist karni chahiye! | Orders.Customer_ID → Customers.Customer_ID |
+| **Composite Key** | 2+ columns milke Primary Key bante hain | (Roll_No + Course_ID) together |
+
+### Foreign Key — Simple Rule:
+- 2 tables hoti hain: **Parent** aur **Child**
+- Child table ka column → Parent table ki PK ko point karta hai
+- Child me wahi value daalo jo Parent me already exist karti ho!
+- Parent delete nahi kar sakte jab tak Child me uski values hain!
+
+---
+
+## 📦 PART 2: SQL DATA TYPES
+
+| Type | Use karo jab | Example |
+|------|-------------|---------|
+| `VARCHAR(n)` | Text — variable length | Name, Email, City |
+| `CHAR(n)` | Fixed length text | PIN code |
+| `TEXT` | Bahut lamba text | Comments, Description |
+| `INT` | Pura number | Age, Marks, Roll No |
+| `BIGINT` | Bahut bada number | Phone Number |
+| `DECIMAL(8,2)` | Decimal number | Price (999.99), Salary |
+| `DATE` | Date only | DOB (2003-05-15) |
+| `TIMESTAMP` | Date + Time | Created_At |
+| `BOOLEAN` | True/False only | Is_Active |
+
+---
+
+## 💻 PART 3: SQL QUERIES — BASIC
+
+### Practice Table Setup (db-fiddle.com ya Oracle Live SQL pe run karo):
+
+```sql
+CREATE TABLE students(
+    roll_no INT PRIMARY KEY,
+    name    VARCHAR(50),
+    city    VARCHAR(50),
+    marks   INT
+);
+
+INSERT INTO students VALUES (101, 'Akshat',  'Surat', 85);
+INSERT INTO students VALUES (102, 'Rahul',   'Delhi', 92);
+INSERT INTO students VALUES (103, 'Priya',   'Surat', 78);
+INSERT INTO students VALUES (104, 'Amit',    'Delhi', 95);
+INSERT INTO students VALUES (105, 'Sneha',   'Pune',  88);
+```
+
+---
+
+### Query 1 — SELECT (Saara data dikhao):
+```sql
+SELECT * FROM students;
+-- * = Saare columns
+```
+
+### Query 2 — Specific Columns:
+```sql
+SELECT name, city FROM students;
+```
+
+### Query 3 — WHERE (Filter karo):
+```sql
+SELECT * FROM students WHERE city = 'Surat';
+SELECT * FROM students WHERE marks > 90;
+```
+
+### Query 4 — AND / OR:
+```sql
+-- Dono condition true honi chahiye
+SELECT * FROM students WHERE city = 'Surat' AND marks > 80;
+
+-- Koi bhi ek condition true ho
+SELECT * FROM students WHERE city = 'Delhi' OR city = 'Pune';
+```
+
+### Query 5 — ORDER BY (Sort karo):
+```sql
+SELECT * FROM students ORDER BY marks ASC;   -- Kam se zyada
+SELECT * FROM students ORDER BY marks DESC;  -- Zyada se kam
+```
+
+### Query 6 — LIMIT (Sirf kuch rows):
+```sql
+-- Top 3 students (highest marks)
+SELECT * FROM students ORDER BY marks DESC LIMIT 3;
+```
+
+### Query 7 — INSERT (Data daalo):
+```sql
+INSERT INTO students VALUES (106, 'Rohan', 'Mumbai', 91);
+```
+
+### Query 8 — UPDATE (Data update karo):
+```sql
+UPDATE students SET marks = 90 WHERE roll_no = 101;
+```
+
+### Query 9 — DELETE (Data hatao):
+```sql
+DELETE FROM students WHERE roll_no = 101;
+```
+
+---
+
+### ⚠️ Common Mistakes Yaad Rakh:
+```
+❌ PRIMRY KEY     → ✅ PRIMARY KEY
+❌ Akshat         → ✅ 'Akshat'  (String = single quotes!)
+❌ SELECT FROM    → ✅ SELECT * FROM
+❌ "Akshat"       → ✅ 'Akshat'  (Double quotes nahi, single quotes!)
+❌ Column ke baad comma nahi → ✅ Comma lagao!
+```
+
+---
+
+### Where to Practice:
+- **PostgreSQL:** [db-fiddle.com](https://db-fiddle.com) → PostgreSQL select karo
+- **Oracle:** [livesql.oracle.com](https://livesql.oracle.com) → Free account banao
 
 
 

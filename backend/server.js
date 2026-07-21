@@ -4265,7 +4265,7 @@ function parseDteFromSymbol(symbol, candleTime = null) {
     const parsed = parseOptionSymbol(symbol);
     if (!parsed) return 1;
     
-    const cleanExpiry = parsed.scripExpiry; // e.g. "09JUN2026"
+    const cleanExpiry = parsed.scripExpiry; // e.g. "21JUL2026"
     const day = cleanExpiry.substring(0, 2);
     const monthStr = cleanExpiry.substring(2, 5);
     const year = cleanExpiry.substring(5, 9);
@@ -4276,18 +4276,20 @@ function parseDteFromSymbol(symbol, candleTime = null) {
     };
     
     const month = months[monthStr.toUpperCase()] || 0;
-    const expiryMidnight = new Date(parseInt(year), month, parseInt(day));
+    // Expiry cutoff is 3:30 PM (15:30) on expiry day
+    const expiryTime = new Date(parseInt(year), month, parseInt(day), 15, 30, 0);
     const today = candleTime ? new Date(candleTime * 1000) : new Date();
-    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     
-    const diffTime = expiryMidnight.getTime() - todayMidnight.getTime();
-    const dte = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return Math.max(1, dte);
+    const diffMs = expiryTime.getTime() - today.getTime();
+    if (diffMs <= 0) return 0.001; // Expired or past 3:30 PM
+    
+    const dteInDays = diffMs / (1000 * 60 * 60 * 24);
+    return Math.max(0.001, dteInDays);
 }
 
 // Helper to run Black-Scholes calculation on backend
 function runBlackScholes(spot, strike, dte, isCall, iv) {
-    const T = Math.max(dte, 0.5) / 365;
+    const T = Math.max(dte, 0.001) / 365;
     const sigma = iv;
     const r = 0.07;
     
