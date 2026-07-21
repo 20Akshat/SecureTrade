@@ -16,7 +16,7 @@ const CONFIGS: Record<string, { step: number; iv: number }> = {
 };
 
 function calcOptionPremium(spot: number, strike: number, dte: number, isCall: boolean, iv: number): number {
-  const T = Math.max(dte, 0.5) / 365;
+  const T = Math.max(dte, 0.001) / 365;
   const sigma = iv;
   const r = 0.07; // 7% risk-free interest rate in India
   
@@ -49,21 +49,23 @@ function calcOptionPremium(spot: number, strike: number, dte: number, isCall: bo
 function parseDteFromSymbol(symbol: string): number {
   const parts = symbol.trim().split(/\s+/);
   const typeIdx = parts.findIndex(p => p === "CE" || p === "PE");
-  if (typeIdx === -1) return 1;
+  if (typeIdx === -1) return 0.001;
   
   const dateParts = parts.slice(1, typeIdx - 1);
   const dateStr = dateParts.join(" ");
   
   const expiryDate = new Date(dateStr);
-  if (isNaN(expiryDate.getTime())) return 1;
+  if (isNaN(expiryDate.getTime())) return 0.001;
   
-  const expiryMidnight = new Date(expiryDate.getFullYear(), expiryDate.getMonth(), expiryDate.getDate());
+  // Expiry cutoff is 3:30 PM (15:30) on expiry day
+  const expiryTime = new Date(expiryDate.getFullYear(), expiryDate.getMonth(), expiryDate.getDate(), 15, 30, 0);
   const today = new Date();
-  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   
-  const diffTime = expiryMidnight.getTime() - todayMidnight.getTime();
-  const dte = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return Math.max(1, dte);
+  const diffMs = expiryTime.getTime() - today.getTime();
+  if (diffMs <= 0) return 0.001;
+  
+  const dteInDays = diffMs / (1000 * 60 * 60 * 24);
+  return Math.max(0.001, dteInDays);
 }
 
 function getLivePrice(symbol: string, marketData: Record<string, any>): number | null {
