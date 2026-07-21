@@ -589,15 +589,6 @@ export default function TradingChart({ customSymbol, onMarketUpdate }: TradingCh
 
         // MACD Histogram calculation removed to fix overlap and stretching visual bugs
 
-        // Calculate Support/Resistance
-        const highs = candleData.map((c: any) => c.high);
-        const lows = candleData.map((c: any) => c.low);
-        const maxPrice = Math.max(...highs);
-        const minPrice = Math.min(...lows);
-        const priceRange = maxPrice - minPrice;
-        finalResistance = Math.round((maxPrice - priceRange * 0.06) * 100) / 100;
-        finalSupport = Math.round((minPrice + priceRange * 0.06) * 100) / 100;
-
         // Draw Today Open marker for Range "Y"
         if (chartData.range === "Y") {
           const today = new Date();
@@ -659,6 +650,16 @@ export default function TradingChart({ customSymbol, onMarketUpdate }: TradingCh
         ? finalMa20.filter((m: any) => m.time >= todayStartTimestamp)
         : finalMa20;
 
+      // Calculate Support/Resistance using visible displayCandleData
+      const activeCandlesForCalc = displayCandleData.length > 0 ? displayCandleData : candleData;
+      const highs = activeCandlesForCalc.map((c: any) => c.high);
+      const lows = activeCandlesForCalc.map((c: any) => c.low);
+      const maxPrice = Math.max(...highs);
+      const minPrice = Math.min(...lows);
+      const priceRange = maxPrice - minPrice;
+      finalResistance = Math.round((maxPrice - priceRange * 0.06) * 100) / 100;
+      finalSupport = Math.round((minPrice + priceRange * 0.06) * 100) / 100;
+
       candleSeriesRef.current.setData(displayCandleData);
       if (mainLineSeriesRef.current) {
         mainLineSeriesRef.current.setData(displayCandleData.map((c: any) => ({ time: c.time, value: c.close })));
@@ -691,32 +692,9 @@ export default function TradingChart({ customSymbol, onMarketUpdate }: TradingCh
         markersRef.current.setMarkers(finalMarkers);
       }
 
-      // Calculate Today's High and Low from the candleData
-      const d = new Date();
-      const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
-      const ist = new Date(utc + (3600000 * 5.5));
-      ist.setHours(0, 0, 0, 0);
-      const todayMidnightIST = Math.floor(ist.getTime() / 1000);
-
-      const todayCandles = candleData.filter((c: any) => c.time >= todayMidnightIST);
-      let todayHighVal = 0;
-      let todayLowVal = 0;
-
-      if (brokerHigh && !isIndex) {
-        todayHighVal = brokerHigh;
-      } else if (todayCandles.length > 0) {
-        todayHighVal = Math.max(...todayCandles.map((c: any) => c.high));
-      } else {
-        todayHighVal = Math.max(...candleData.map((c: any) => c.high));
-      }
-
-      if (brokerLow && !isIndex) {
-        todayLowVal = brokerLow;
-      } else if (todayCandles.length > 0) {
-        todayLowVal = Math.min(...todayCandles.map((c: any) => c.low));
-      } else {
-        todayLowVal = Math.min(...candleData.map((c: any) => c.low));
-      }
+      // Calculate Today's High and Low from the visible displayCandleData
+      let todayHighVal = maxPrice;
+      let todayLowVal = minPrice;
 
       todayHighValRef.current = todayHighVal;
       todayLowValRef.current = todayLowVal;
