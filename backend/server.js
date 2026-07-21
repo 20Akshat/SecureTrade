@@ -2546,10 +2546,8 @@ async function formatOptionCandlesIfNeeded(indexCandles, symbol) {
     const dte = parseDteFromSymbol(symbol);
     const iv = parsed.scripName === "BANKNIFTY" ? 0.16 : 0.13;
 
-    // Fetch real high and low for scaling
-    let realHigh = 0;
-    let realLow = 0;
-    
+    // Fetch real LTP for offset anchoring
+    let realLtp = 0;
     const key = `${parsed.scripName}_${parsed.scripExpiry}_${parsed.strike}_${parsed.type}`;
     const item = scripMap[key];
     if (item) {
@@ -2566,8 +2564,7 @@ async function formatOptionCandlesIfNeeded(indexCandles, symbol) {
             }
         }
         if (cached) {
-            realHigh = cached.high || 0;
-            realLow = cached.low || 0;
+            realLtp = cached.price || cached.ltp || 0;
         }
     }
 
@@ -2590,50 +2587,16 @@ async function formatOptionCandlesIfNeeded(indexCandles, symbol) {
         };
     });
 
-    // If we have actual high/low values, scale the Black-Scholes premium candles mathematically
-    if (realHigh > 0 && realLow > 0 && calculatedCandles.length > 0) {
-        // Calculate 9:15 AM IST today in UTC epoch timestamp
-        const formatter = new Intl.DateTimeFormat('en-GB', {
-            timeZone: 'Asia/Kolkata',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
+    // Anchor calculated candles to exact live LTP to preserve natural candle shapes
+    if (realLtp > 0 && calculatedCandles.length > 0) {
+        const lastCalcClose = calculatedCandles[calculatedCandles.length - 1].close;
+        const offset = realLtp - lastCalcClose;
+        calculatedCandles.forEach(c => {
+            c.open = Math.max(0.05, Math.round((c.open + offset) * 20) / 20);
+            c.high = Math.max(0.05, Math.round((c.high + offset) * 20) / 20);
+            c.low = Math.max(0.05, Math.round((c.low + offset) * 20) / 20);
+            c.close = Math.max(0.05, Math.round((c.close + offset) * 20) / 20);
         });
-        const parts = formatter.formatToParts(new Date());
-        const dayPart = parts.find(p => p.type === 'day')?.value || '12';
-        const monthPart = parts.find(p => p.type === 'month')?.value || '06';
-        const yearPart = parts.find(p => p.type === 'year')?.value || '2026';
-        const todayStartTimeRaw = Date.UTC(parseInt(yearPart), parseInt(monthPart) - 1, parseInt(dayPart), 3, 45, 0) / 1000;
-
-        const todayCandles = calculatedCandles.filter(c => c.time >= todayStartTimeRaw);
-
-        if (todayCandles.length > 0) {
-            let calcMin = Infinity;
-            let calcMax = -Infinity;
-            todayCandles.forEach(c => {
-                if (c.low < calcMin) calcMin = c.low;
-                if (c.high > calcMax) calcMax = c.high;
-            });
-
-            const calcRange = calcMax - calcMin;
-            const realRange = realHigh - realLow;
-
-            if (calcRange > 0) {
-                calculatedCandles.forEach(c => {
-                    if (c.time >= todayStartTimeRaw) {
-                        const pctOpen = (c.open - calcMin) / calcRange;
-                        const pctHigh = (c.high - calcMin) / calcRange;
-                        const pctLow = (c.low - calcMin) / calcRange;
-                        const pctClose = (c.close - calcMin) / calcRange;
-
-                        c.open = Math.max(0.05, Math.round((realLow + pctOpen * realRange) * 20) / 20);
-                        c.high = Math.max(0.05, Math.round((realLow + pctHigh * realRange) * 20) / 20);
-                        c.low = Math.max(0.05, Math.round((realLow + pctLow * realRange) * 20) / 20);
-                        c.close = Math.max(0.05, Math.round((realLow + pctClose * realRange) * 20) / 20);
-                    }
-                });
-            }
-        }
     }
 
     return calculatedCandles;
