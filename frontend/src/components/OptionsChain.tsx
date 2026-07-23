@@ -61,7 +61,7 @@ function getBankNiftyExpiries(): { label: string; dte: number; type: "W" | "M" }
 function getWeeklyExpiries(symbol: string): { label: string; dte: number; type: "W" | "M" }[] {
   const today = new Date();
   const day = today.getDay();
-  const targetDay = symbol === "SENSEX" ? 5 : (symbol === "BANKNIFTY" ? 3 : 2); // SENSEX=Friday(5), BANKNIFTY=Wednesday(3), NIFTY50=Tuesday(2)
+  const targetDay = symbol === "SENSEX" ? 4 : (symbol === "BANKNIFTY" ? 3 : 2); // SENSEX=Thursday(4), BANKNIFTY=Wednesday(3), NIFTY50=Tuesday(2)
   
   const expiries = [];
   const diff = targetDay - day;
