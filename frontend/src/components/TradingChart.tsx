@@ -697,9 +697,9 @@ export default function TradingChart({ customSymbol, onMarketUpdate }: TradingCh
         markersRef.current.setMarkers(finalMarkers);
       }
 
-      // Calculate Today's High and Low from the visible displayCandleData
-      let todayHighVal = maxPrice;
-      let todayLowVal = minPrice;
+      // Calculate Today's High and Low from the visible displayCandleData or broker feed
+      let todayHighVal = (!isIndex && brokerHigh && brokerHigh > 0) ? brokerHigh : maxPrice;
+      let todayLowVal = (!isIndex && brokerLow && brokerLow > 0) ? brokerLow : minPrice;
 
       todayHighValRef.current = todayHighVal;
       todayLowValRef.current = todayLowVal;
@@ -866,7 +866,7 @@ export default function TradingChart({ customSymbol, onMarketUpdate }: TradingCh
       lastDrawnEntryPriceRef.current = 0;
     }
 
-  }, [chartData, currentPrice, chartType, activeBotTrade]);
+  }, [chartData, currentPrice, chartType, activeBotTrade, brokerHigh, brokerLow]);
 
   return (
     <div className="w-full h-full relative bg-white flex flex-col">
