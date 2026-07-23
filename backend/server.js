@@ -3912,7 +3912,7 @@ const globalUpdateInterval = setInterval(async () => {
 
                 const lastCandle = curState.candles[curState.candles.length - 1];
 
-                // --- TREND PULLBACK RE-ENTRY LOGIC ---
+                // --- TREND PULLBACK RE-ENTRY & TREND RIDER LOGIC ---
                 if (signal === "WAIT" && curState.candles.length >= 2) {
                     const trendBullish = ema9 > ema21 && ema21 > ema50;
                     const trendBearish = ema9 < ema21 && ema21 < ema50;
@@ -3924,6 +3924,13 @@ const globalUpdateInterval = setInterval(async () => {
                         const rsiOk = rsi >= 38;
                         if (pullbackToEma && notBreakout && confirmation && rsiOk) {
                             signal = "BUY (Trend Pullback Re-entry)";
+                        } else {
+                            // Trend Rider Breakout (runs even without pullback)
+                            const isBreakout = price > lastCandle.high;
+                            const notTooFar = price <= (ema9 + 3.0 * activeAtr);
+                            if (isBreakout && notTooFar && rsiOk) {
+                                signal = "BUY (Trend Rider Breakout)";
+                            }
                         }
                     } else if (trendBearish) {
                         const pullbackToEma = lastCandle.high >= (ema9 - 0.8 * activeAtr);
@@ -3932,6 +3939,13 @@ const globalUpdateInterval = setInterval(async () => {
                         const rsiOk = rsi <= 62;
                         if (pullbackToEma && notBreakout && confirmation && rsiOk) {
                             signal = "SELL (Trend Pullback Re-entry)";
+                        } else {
+                            // Trend Rider Breakout (runs even without pullback)
+                            const isBreakout = price < lastCandle.low;
+                            const notTooFar = price >= (ema9 - 3.5 * activeAtr);
+                            if (isBreakout && notTooFar && rsiOk) {
+                                signal = "SELL (Trend Rider Breakout)";
+                            }
                         }
                     }
                 }
