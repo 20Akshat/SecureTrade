@@ -142,7 +142,7 @@ function getExpiryDate(symbol: string): Date {
     return lastTuesday;
   }
   
-  const targetDay = symbol.includes("SENSEX") ? 5 : (symbol.includes("BANKNIFTY") ? 3 : 2); // SENSEX=Friday(5), BANKNIFTY=Wednesday(3), NIFTY50=Tuesday(2)
+  const targetDay = symbol.includes("SENSEX") ? 4 : (symbol.includes("BANKNIFTY") ? 3 : 2); // SENSEX=Thursday(4), BANKNIFTY=Wednesday(3), NIFTY50=Tuesday(2)
   const diff = targetDay - today.getDay();
   let daysTo = diff < 0 ? diff + 7 : diff;
   if (diff === 0) {
