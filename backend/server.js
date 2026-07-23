@@ -3486,6 +3486,8 @@ async function seedRealHistory() {
                     marketState[symbol].isRealHistorySeeded = true;
                     
                     const basePrice = history[history.length - 1];
+                    marketState[symbol].realPrice = basePrice;
+                    marketState[symbol].currentPrice = basePrice;
                     marketState[symbol].currentCandleOpen = basePrice;
                     marketState[symbol].currentCandleHigh = basePrice;
                     marketState[symbol].currentCandleLow = basePrice;
