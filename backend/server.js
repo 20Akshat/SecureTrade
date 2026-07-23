@@ -3912,6 +3912,30 @@ const globalUpdateInterval = setInterval(async () => {
 
                 const lastCandle = curState.candles[curState.candles.length - 1];
 
+                // --- TREND PULLBACK RE-ENTRY LOGIC ---
+                if (signal === "WAIT" && curState.candles.length >= 2) {
+                    const trendBullish = ema9 > ema21 && ema21 > ema50;
+                    const trendBearish = ema9 < ema21 && ema21 < ema50;
+
+                    if (trendBullish) {
+                        const pullbackToEma = lastCandle.low <= (ema9 + 0.8 * activeAtr);
+                        const notBreakout = lastCandle.close > ema9;
+                        const confirmation = price > lastCandle.high;
+                        const rsiOk = rsi >= 38;
+                        if (pullbackToEma && notBreakout && confirmation && rsiOk) {
+                            signal = "BUY (Trend Pullback Re-entry)";
+                        }
+                    } else if (trendBearish) {
+                        const pullbackToEma = lastCandle.high >= (ema9 - 0.8 * activeAtr);
+                        const notBreakout = lastCandle.close < ema9;
+                        const confirmation = price < lastCandle.low;
+                        const rsiOk = rsi <= 62;
+                        if (pullbackToEma && notBreakout && confirmation && rsiOk) {
+                            signal = "SELL (Trend Pullback Re-entry)";
+                        }
+                    }
+                }
+
                 // Reset indicators at the boundary of a new candle
                 if (curState.tickCount === 0) {
                     curState.pullbackCeAlert = false;
