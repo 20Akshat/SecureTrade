@@ -2206,6 +2206,51 @@ app.post('/api/options-chain/quotes', async (req, res) => {
     }
 });
 
+// GET DYNAMIC ACTIVE EXPIRIES FROM ANGEL ONE SCRIP MASTER FOR AN INDEX
+app.get('/api/options-expiries', (req, res) => {
+    try {
+        const { symbol } = req.query;
+        if (!symbol) return res.status(400).json({ error: "Symbol required" });
+
+        let scripName = symbol;
+        if (symbol === 'NIFTY50' || symbol === 'NIFTY') scripName = 'NIFTY';
+
+        const expiries = new Set();
+        Object.keys(scripMap).forEach(key => {
+            const parts = key.split('_');
+            if (parts[0] === scripName) {
+                expiries.add(parts[1]);
+            }
+        });
+
+        const list = Array.from(expiries).map(expiry => {
+            // expiry format: e.g. 23JUL2026 or 23JUL26
+            const day = expiry.substring(0, 2);
+            const month = expiry.substring(2, 5);
+            // Handle both 2026 (length 9) and 26 (length 7)
+            const year = expiry.length === 9 ? expiry.substring(7, 9) : expiry.substring(5, 7);
+            const label = `${day} ${month} ${year}`;
+            
+            const monthIndex = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'].indexOf(month.toUpperCase());
+            const dateObj = new Date(parseInt(`20${year}`), monthIndex >= 0 ? monthIndex : 0, parseInt(day));
+            
+            return {
+                label,
+                date: dateObj
+            };
+        })
+        .filter(l => !isNaN(l.date.getTime()))
+        .sort((a, b) => a.date - b.date)
+        .map(l => l.label);
+
+        // Keep top 6 active expiries
+        res.json(list.slice(0, 6));
+    } catch (err) {
+        console.error("Error in options-expiries route:", err.message);
+        res.status(500).json({ error: "Failed to fetch expiries" });
+    }
+});
+
 // GET REAL LTP AND OHLC FOR A SINGLE OPTION SYMBOL (used by bot)
 app.post('/api/option-ltp', async (req, res) => {
     try {
@@ -3480,6 +3525,33 @@ async function seedRealHistory() {
                         low: c[3],
                         close: c[4]
                     }));
+
+                    // --- DYNAMIC DAY-TO-DAY GAP-REMOVAL LOGIC ---
+                    let gapIndex = -1;
+                    for (let i = 1; i < rawCandles.length; i++) {
+                        const datePrev = rawCandles[i-1][0].substring(0, 10);
+                        const dateCurr = rawCandles[i][0].substring(0, 10);
+                        if (datePrev !== dateCurr) {
+                            gapIndex = i;
+                            break;
+                        }
+                    }
+
+                    if (gapIndex !== -1) {
+                        const yesterdayClose = rawCandles[gapIndex - 1][4];
+                        const todayOpen = rawCandles[gapIndex][1];
+                        const gap = todayOpen - yesterdayClose;
+                        if (Math.abs(gap) > 1.5) {
+                            console.log(`🔧 [${symbol}] Day-to-day gap of ${gap.toFixed(2)} points detected at index ${gapIndex}. Adjusting yesterday's history to align...`);
+                            for (let j = 0; j < gapIndex; j++) {
+                                history[j] = history[j] + gap;
+                                candles[j].open = candles[j].open + gap;
+                                candles[j].high = candles[j].high + gap;
+                                candles[j].low = candles[j].low + gap;
+                                candles[j].close = candles[j].close + gap;
+                            }
+                        }
+                    }
 
                     marketState[symbol].history = history;
                     marketState[symbol].candles = candles;
