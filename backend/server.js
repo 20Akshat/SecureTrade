@@ -4447,3 +4447,15 @@ function runBlackScholes(spot, strike, dte, isCall, iv) {
         
     return Math.max(0.05, Math.round(premium * 20) / 20);
 }
+
+// Keep-alive ping to Render production server every 4 minutes to prevent sleep
+if (process.env.NODE_ENV !== 'production') {
+    setInterval(() => {
+        const https = require('https');
+        https.get('https://securetrade-n3qh.onrender.com/api/options-expiries', (res) => {
+            console.log(`💓 [Keep-Alive] Pinged Render production server successfully. Status: ${res.statusCode}`);
+        }).on('error', (err) => {
+            console.error('❌ [Keep-Alive] Ping failed:', err.message);
+        });
+    }, 4 * 60 * 1000);
+}
