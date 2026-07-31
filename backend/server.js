@@ -3245,6 +3245,7 @@ async function fetchAngelPrices() {
             }
             throw new Error(`Non-JSON index/option price response: ${data.substring(0, 50)}`);
         }
+        const fetched = data?.data?.fetched || [];
         fetched.forEach(item => {
             if (item.symbolToken === '26000' && item.ltp) {
                 const prev = marketState['NIFTY50'].realPrice;
