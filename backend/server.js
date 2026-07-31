@@ -1287,16 +1287,25 @@ app.post('/api/buy', authMiddleware, async (req, res) => {
     try {
         await acquireLock(userId);
         let executionPrice;
-        if (req.body.price && !isNaN(Number(req.body.price)) && Number(req.body.price) > 0) {
-            executionPrice = Number(req.body.price);
-            console.log(`⚡ [API BUY] Using client-provided price: ₹${executionPrice}`);
-        } else {
+        let fetchedPrice = null;
+        if (checkIsMarketOpen()) {
             try {
-                executionPrice = await getLivePriceForSymbol(symbol, true);
+                fetchedPrice = await getLivePriceForSymbol(symbol, true);
+                if (fetchedPrice && fetchedPrice > 0) {
+                    executionPrice = fetchedPrice;
+                    console.log(`⚡ [API BUY] Live market hours: Using fresh broker price: ₹${executionPrice}`);
+                }
             } catch (priceErr) {
-                console.error(`❌ [API BUY] Price fetch error: ${priceErr.message}`);
-                
-                // Try to get last cached real market price first
+                console.error(`❌ [API BUY] Live price fetch failed, attempting cache/client fallback: ${priceErr.message}`);
+            }
+        }
+
+        if (!executionPrice) {
+            if (req.body.price && !isNaN(Number(req.body.price)) && Number(req.body.price) > 0) {
+                executionPrice = Number(req.body.price);
+                console.log(`⚡ [API BUY] Fallback: Using client-provided price: ₹${executionPrice}`);
+            } else {
+                // Try cache first
                 const parsed = parseOptionSymbol(symbol);
                 if (parsed) {
                     const dateStr = parsed.expiry.toUpperCase().replace(/\s+/g, '');
@@ -1325,11 +1334,11 @@ app.post('/api/buy', authMiddleware, async (req, res) => {
                         console.error(`❌ Fallback Black-Scholes calculation failed: ${calcErr.message}`);
                     }
                 }
-                
-                if (!executionPrice) {
-                    return res.status(503).json({ error: "Live market price is currently unavailable and no cache exists. Please try again." });
-                }
             }
+        }
+
+        if (!executionPrice) {
+            return res.status(503).json({ error: "Live market price is currently unavailable and no cache exists. Please try again." });
         }
 
         const totalCost = quantity * executionPrice;
@@ -1424,16 +1433,25 @@ app.post('/api/sell', authMiddleware, async (req, res) => {
     try {
         await acquireLock(userId);
         let executionPrice;
-        if (req.body.price && !isNaN(Number(req.body.price)) && Number(req.body.price) > 0) {
-            executionPrice = Number(req.body.price);
-            console.log(`⚡ [API SELL] Using client-provided price: ₹${executionPrice}`);
-        } else {
+        let fetchedPrice = null;
+        if (checkIsMarketOpen()) {
             try {
-                executionPrice = await getLivePriceForSymbol(symbol, true);
+                fetchedPrice = await getLivePriceForSymbol(symbol, true);
+                if (fetchedPrice && fetchedPrice > 0) {
+                    executionPrice = fetchedPrice;
+                    console.log(`⚡ [API SELL] Live market hours: Using fresh broker price: ₹${executionPrice}`);
+                }
             } catch (priceErr) {
-                console.error(`❌ [API SELL] Price fetch error: ${priceErr.message}`);
-                
-                // Try to get last cached real market price first
+                console.error(`❌ [API SELL] Live price fetch failed, attempting cache/client fallback: ${priceErr.message}`);
+            }
+        }
+
+        if (!executionPrice) {
+            if (req.body.price && !isNaN(Number(req.body.price)) && Number(req.body.price) > 0) {
+                executionPrice = Number(req.body.price);
+                console.log(`⚡ [API SELL] Fallback: Using client-provided price: ₹${executionPrice}`);
+            } else {
+                // Try cache first
                 const parsed = parseOptionSymbol(symbol);
                 if (parsed) {
                     const dateStr = parsed.expiry.toUpperCase().replace(/\s+/g, '');
@@ -1462,11 +1480,11 @@ app.post('/api/sell', authMiddleware, async (req, res) => {
                         console.error(`❌ Fallback Black-Scholes calculation failed: ${calcErr.message}`);
                     }
                 }
-                
-                if (!executionPrice) {
-                    return res.status(503).json({ error: "Live market price is currently unavailable and no cache exists. Please try again." });
-                }
             }
+        }
+
+        if (!executionPrice) {
+            return res.status(503).json({ error: "Live market price is currently unavailable and no cache exists. Please try again." });
         }
 
         let portfolioData = [];
