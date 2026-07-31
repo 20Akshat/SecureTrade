@@ -3245,12 +3245,11 @@ async function fetchAngelPrices() {
             }
             throw new Error(`Non-JSON index/option price response: ${data.substring(0, 50)}`);
         }
-        const fetched = data?.data?.fetched || [];
         fetched.forEach(item => {
             if (item.symbolToken === '26000' && item.ltp) {
                 const prev = marketState['NIFTY50'].realPrice;
-                // Reject sudden index jumps/crashes > 2% in a single tick
-                if (prev && Math.abs(item.ltp - prev) / prev > 0.02) {
+                // Reject sudden index jumps/crashes > 2% in a single tick (only after real history is seeded)
+                if (prev && marketState['NIFTY50'].isRealHistorySeeded && Math.abs(item.ltp - prev) / prev > 0.02) {
                     console.warn(`🚨 [Spot Glitch Guard] Rejected NIFTY50 spike/crash: ${prev} -> ${item.ltp}`);
                 } else {
                     marketState['NIFTY50'].realPrice = item.ltp;
@@ -3259,7 +3258,7 @@ async function fetchAngelPrices() {
                 }
             } else if (item.symbolToken === '26009' && item.ltp) {
                 const prev = marketState['BANKNIFTY'].realPrice;
-                if (prev && Math.abs(item.ltp - prev) / prev > 0.02) {
+                if (prev && marketState['BANKNIFTY'].isRealHistorySeeded && Math.abs(item.ltp - prev) / prev > 0.02) {
                     console.warn(`🚨 [Spot Glitch Guard] Rejected BANKNIFTY spike/crash: ${prev} -> ${item.ltp}`);
                 } else {
                     marketState['BANKNIFTY'].realPrice = item.ltp;
@@ -3268,7 +3267,7 @@ async function fetchAngelPrices() {
                 }
             } else if (item.symbolToken === '1' && item.ltp) {
                 const prev = marketState['SENSEX'].realPrice;
-                if (prev && Math.abs(item.ltp - prev) / prev > 0.02) {
+                if (prev && marketState['SENSEX'].isRealHistorySeeded && Math.abs(item.ltp - prev) / prev > 0.02) {
                     console.warn(`🚨 [Spot Glitch Guard] Rejected SENSEX spike/crash: ${prev} -> ${item.ltp}`);
                 } else {
                     marketState['SENSEX'].realPrice = item.ltp;
