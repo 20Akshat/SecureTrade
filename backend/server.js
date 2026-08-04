@@ -141,7 +141,7 @@ async function syncAllKycConfigs() {
         console.error("❌ [KYC Sync] Fatal sync engine failure:", err.message);
     }
 }
-axios.defaults.timeout = 4000; // 4s default timeout for all HTTP requests
+axios.defaults.timeout = 15000; // 15s default timeout for all HTTP requests
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -2164,7 +2164,7 @@ app.post('/api/options-chain/quotes', async (req, res) => {
             }
             if (angelJwtToken) {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                const timeoutId = setTimeout(() => controller.abort(), 12000);
                 try {
                     const quoteRes = await axios.post('https://apiconnect.angelbroking.com/rest/secure/angelbroking/market/v1/quote/', {
                         mode: "LTP",
@@ -2862,7 +2862,7 @@ async function fetchAndCacheOptionPrices(tokensNFO, tokensBFO) {
     lastGlobalFetchTime = now;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
     try {
         const exchangeTokens = {};
         if (tokensNFO.length > 0) exchangeTokens["NFO"] = tokensNFO;
@@ -3033,7 +3033,7 @@ async function getLivePriceForSymbol(symbol, forceFresh = false) {
 
     console.log(`📡 [Cache Miss] Fetching live price from Angel One for ${symbol}...`);
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
     try {
         const quoteRes = await axios.post('https://apiconnect.angelbroking.com/rest/secure/angelbroking/market/v1/quote/', {
             mode: "LTP",
@@ -3136,7 +3136,7 @@ async function angelLogin() {
     lastLoginAttemptTime = now;
     loginPromise = (async () => {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
         try {
             const totp = speakeasy.totp({
                 secret: process.env.ANGEL_TOTP_SECRET,
@@ -3212,7 +3212,7 @@ async function fetchAngelPrices() {
     
     fetchAngelPrices.inProgress = true;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
     try {
         const tokensNFO = [];
         const tokensBFO = [];
@@ -3506,7 +3506,7 @@ async function seedRealHistory() {
             }
             const config = INDEX_TOKENS[symbol];
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 4000);
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
             try {
                 const response = await axios.post(
                     'https://apiconnect.angelone.in/rest/secure/angelbroking/historical/v1/getCandleData',
@@ -3592,7 +3592,7 @@ async function seedRealHistory() {
                     // Wait 1 second to respect rate limits, then fetch ONE_MINUTE candles
                     await new Promise(resolve => setTimeout(resolve, 1000));
                     const controller1m = new AbortController();
-                    const timeoutId1m = setTimeout(() => controller1m.abort(), 4000);
+                    const timeoutId1m = setTimeout(() => controller1m.abort(), 15000);
                     try {
                         const response1m = await axios.post(
                             'https://apiconnect.angelone.in/rest/secure/angelbroking/historical/v1/getCandleData',
