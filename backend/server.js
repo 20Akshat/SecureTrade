@@ -179,8 +179,17 @@ async function loadAndIndexScripMaster() {
             await new Promise((resolve, reject) => {
                 const https = require('https');
                 const file = fs.createWriteStream(scripMasterPath);
-                https.get('https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json', (response) => {
+                
+                file.on('error', (err) => {
+                    file.close();
+                    fs.unlink(scripMasterPath, () => {});
+                    reject(err);
+                });
+
+                const req = https.get('https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json', (response) => {
                     if (response.statusCode !== 200) {
+                        file.close();
+                        fs.unlink(scripMasterPath, () => {});
                         return reject(new Error(`HTTP ${response.statusCode}`));
                     }
                     response.pipe(file);
@@ -188,7 +197,10 @@ async function loadAndIndexScripMaster() {
                         file.close();
                         resolve();
                     });
-                }).on('error', (err) => {
+                });
+                
+                req.on('error', (err) => {
+                    file.close();
                     fs.unlink(scripMasterPath, () => {});
                     reject(err);
                 });
