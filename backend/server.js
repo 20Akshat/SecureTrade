@@ -3416,8 +3416,8 @@ function generateSignalGainz(rsi, prices, symbol, candles = []) {
     const ist = new Date(utc + (3600000 * 5.5));
     const timeVal = ist.getHours() * 100 + ist.getMinutes();
     
-    // We only execute trend pullback after morning rush (10:00 - 15:15)
-    if (timeVal < 1000 || timeVal > 1515) return "WAIT";
+    // We only execute trend pullback after morning rush (10:00 - 15:28)
+    if (timeVal < 1000 || timeVal > 1528) return "WAIT";
 
     // ── TRENDING REGIME FILTER (9, 21, 50 EMA alignment) ──
     const isBullishTrend = (currentEma9 > currentEma21 && currentEma21 > currentEma50);
