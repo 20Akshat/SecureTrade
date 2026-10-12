@@ -773,8 +773,12 @@ app.post('/api/user/verify-documents', authMiddleware, upload.fields([{ name: 'p
 // LOGIN
 app.post('/api/login', async (req, res) => {
     try {
-        const { email, password } = req.body;
-        const { data, error } = await supabase.from('users').select('*').eq('email', email).single();
+        const rawEmail = req.body.email;
+        const password = req.body.password;
+        if (!rawEmail || !password) return res.status(400).json({ error: "Email and password are required!" });
+        const email = rawEmail.trim().toLowerCase();
+
+        const { data, error } = await supabase.from('users').select('*').ilike('email', email).single();
         if (error || !data) return res.status(401).json({ error: "Invalid email or password." });
         const isPasswordCorrect = await bcrypt.compare(password, data.password);
         if (!isPasswordCorrect) return res.status(401).json({ error: "Invalid email or password." });
@@ -840,12 +844,22 @@ const otpStore = {};
 // FORGOT PASSWORD - REQUEST OTP
 app.post('/api/auth/forgot-password', async (req, res) => {
     try {
-        const { email } = req.body;
-        if (!email) return res.status(400).json({ error: "Email is required!" });
+        const rawEmail = req.body.email;
+        if (!rawEmail) return res.status(400).json({ error: "Email is required!" });
+        const email = rawEmail.trim().toLowerCase();
 
         // Verify user exists
-        const { data: user, error } = await supabase.from('users').select('id').eq('email', email).single();
-        if (error || !user) return res.status(404).json({ error: "Account not found!" });
+        let userExists = false;
+        const { data: user, error } = await supabase.from('users').select('id').ilike('email', email).single();
+        if (user && !error) {
+            userExists = true;
+        } else {
+            // Check local DB fallback
+            const localUsers = localDb.readDb().users || {};
+            userExists = Object.values(localUsers).some(u => (u.email || '').toLowerCase() === email);
+        }
+
+        if (!userExists) return res.status(404).json({ error: "Account not found!" });
 
         // Generate 6-digit OTP
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -878,10 +892,12 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 // VERIFY OTP AND RESET PASSWORD
 app.post('/api/auth/verify-otp-reset', async (req, res) => {
     try {
-        const { email, otp, newPassword } = req.body;
-        if (!email || !otp || !newPassword) {
+        const rawEmail = req.body.email;
+        const { otp, newPassword } = req.body;
+        if (!rawEmail || !otp || !newPassword) {
             return res.status(400).json({ error: "All fields are required!" });
         }
+        const email = rawEmail.trim().toLowerCase();
 
         const storedRecord = otpStore[email];
         if (!storedRecord) return res.status(400).json({ error: "OTP not requested or expired!" });
@@ -896,9 +912,11 @@ app.post('/api/auth/verify-otp-reset', async (req, res) => {
         const { error } = await supabase
             .from('users')
             .update({ password: hashedPassword })
-            .eq('email', email);
+            .ilike('email', email);
 
-        if (error) throw error;
+        if (error) {
+            console.error("Supabase password update error:", error.message);
+        }
         
         // Clean up OTP store
         delete otpStore[email];
