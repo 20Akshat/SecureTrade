@@ -496,5 +496,124 @@ DELETE FROM students WHERE roll_no = 101;
 - **PostgreSQL:** [db-fiddle.com](https://db-fiddle.com) → PostgreSQL select karo
 - **Oracle:** [livesql.oracle.com](https://livesql.oracle.com) → Free account banao
 
+---
 
 
+
+---
+
+# 📚 Lesson 7: Complete SQL Master Notes & All Solved LeetCode Questions
+
+---
+
+## 🗺️ PART 1: SQL Sequence & Writing Rules
+
+### 1. Writing Sequence (Rule: S-D-F-W-G-H-O-L)
+SQL me query likhne ka order compulsory fix hota hai:
+
+```sql
+SELECT DISTINCT columns           -- 1. Kya output dikhana hai?
+FROM table_name                   -- 2. Kis table se data lana hai?
+WHERE row_filter_condition        -- 3. Individual rows filter karne ke liye
+GROUP BY group_columns            -- 4. Kiske basis par groups banane hain?
+HAVING group_filter_condition     -- 5. Groups filter karne ke liye (Aggregate functions)
+ORDER BY sort_column [ASC/DESC]   -- 6. Output ko sort karne ke liye
+LIMIT number_of_rows;             -- 7. Kitni rows dikhani hain?
+```
+
+### 2. JOINS Quick Rules
+* `FROM Table_A LEFT JOIN Table_B ON ...`
+* **LEFT Table (`Table_A`):** `FROM` ke baad wali table. Jiska **100% data compulsory** chahiye, use LEFT me rakho!
+* **RIGHT Table (`Table_B`):** `JOIN` ke baad wali table. Secondary data ke liye.
+* **INNER JOIN:** Sirf dono tables me matching data aayega.
+* **LEFT JOIN:** Left ka saara data + Right ka matching (baaki me `NULL`).
+
+---
+
+## 🏆 PART 2: All 7 Solved LeetCode SQL Questions (Master Solution Bank)
+
+---
+
+### 🟢 1. LeetCode 595: Big Countries
+* **Goal:** Aise countries ke `name`, `population`, `area` nikalna jinka area $\ge 3,000,000$ YA population $\ge 25,000,000$ ho.
+* **Key Concept:** `WHERE` clause with `OR` operator. Numbers me comma (`,`) nahi lagana.
+
+```sql
+SELECT name, population, area
+FROM World
+WHERE area >= 3000000 
+OR population >= 25000000;
+```
+* **Explanation:** `OR` condition ensure karti hai ki dono me se ek bhi shart poori ho toh country select ho jaye.
+
+### 🟢 2. LeetCode 1693: Daily Leads and Partners
+* **Goal:** Har `date_id` aur `make_name` ke liye unique leads aur unique partners count karna.
+* **Key Concept:** Multiple columns `GROUP BY` + `COUNT(DISTINCT ...)`.
+
+```sql
+SELECT date_id, make_name,
+       COUNT(DISTINCT lead_id) AS unique_leads,
+       COUNT(DISTINCT partner_id) AS unique_partners
+FROM DailySales
+GROUP BY date_id, make_name;
+```
+* **Explanation:** `GROUP BY date_id, make_name` har date aur company ka alag dappa (group) banata hai, aur `COUNT(DISTINCT ...)` duplicates hatakar unique count karta hai.
+
+### 🟢 3. LeetCode 1050: Actors and Directors Who Cooperated At Least Three Times
+* **Goal:** Un `actor_id` aur `director_id` ke pairs nikalna jinhone sath me $\ge 3$ baar kaam kiya ho.
+* **Key Concept:** Pair grouping (`GROUP BY col1, col2`) + `HAVING COUNT(*) >= 3`.
+
+```sql
+SELECT actor_id, director_id
+FROM ActorDirector
+GROUP BY actor_id, director_id
+HAVING COUNT(*) >= 3;
+```
+* **Explanation:** `GROUP BY actor_id, director_id` jodi ke basis par group banata hai, aur `HAVING COUNT(*) >= 3` sirf 3 ya usse zyada rows wale groups filter karta hai.
+
+### 🟢 4. LeetCode 584: Find Customer Referee (The NULL Trap!)
+* **Goal:** Un customers ke `name` nikalna jo referee ID 2 ke dwara refer **NAHI** kiye gaye hain.
+* **Key Concept:** SQL NULL handling rule (`IS NULL`). `!= 2` me `null` wali rows include nahi hoti.
+
+```sql
+SELECT name
+FROM Customer
+WHERE referee_id != 2 
+OR referee_id IS NULL;
+```
+* **Explanation:** SQL me `NULL` ko compare karne ke liye `IS NULL` bolna padta hai. `WHERE referee_id != 2 OR referee_id IS NULL` dono cases cover karta hai.
+
+### 🟢 5. LeetCode 1148: Article Views I
+* **Goal:** Un authors ke IDs nikalna jinhone khud ka hi article khud padha ho, duplicate hatakar sorted order me.
+* **Key Concept:** Column comparison (`author_id = viewer_id`) + `DISTINCT` + `ORDER BY ... ASC`.
+
+```sql
+SELECT DISTINCT author_id AS id
+FROM Views
+WHERE author_id = viewer_id
+ORDER BY id ASC;
+```
+* **Explanation:** `WHERE author_id = viewer_id` khud ke views filter karta hai, `DISTINCT` duplicate IDs hatata hai, aur `ORDER BY id ASC` chote se bade order me sort karta hai.
+
+### 🟢 6. LeetCode 175: Combine Two Tables
+* **Goal:** Har Person ka `firstName`, `lastName`, `city`, `state` nikalna. Agar address nahi hai toh bhi person ka naam aana chahiye (`NULL` ke sath).
+* **Key Concept:** `LEFT JOIN` (Person table ka 100% data compulsory hai).
+
+```sql
+SELECT firstName, lastName, city, state
+FROM Person
+LEFT JOIN Address ON Person.personId = Address.personId;
+```
+* **Explanation:** `FROM Person` (LEFT table) ensure karta hai ki Person table ka koi record miss na ho. `personId` bridge column hai.
+
+### 🟢 7. LeetCode 1075: Project Employees I
+* **Goal:** Har project ke employees ka average experience (2 decimal places tak round) nikalna.
+* **Key Concept:** `JOIN` + `GROUP BY` + `AVG()` + `ROUND(..., 2)`.
+
+```sql
+SELECT project_id, ROUND(AVG(experience_years), 2) AS average_years
+FROM Project
+JOIN Employee ON Project.employee_id = Employee.employee_id
+GROUP BY project_id;
+```
+* **Explanation:** `JOIN Employee` ne project aur experience ka data ek badi table me laya, `GROUP BY project_id` ne project wise buckets banaye, aur `ROUND(AVG(...), 2)` ne average calculate karke 2 decimals me format kiya.

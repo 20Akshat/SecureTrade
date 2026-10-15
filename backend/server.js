@@ -239,6 +239,27 @@ async function loadAndIndexScripMaster() {
     }
 }
 
+// Helper to resolve option contracts with holiday/preponed expiry tolerance (+/- 1-3 days)
+function findScripItem(scripName, scripExpiry, strike, type) {
+    if (!scripName || !scripExpiry || !strike || !type) return null;
+    const directKey = `${scripName}_${scripExpiry}_${strike}_${type}`;
+    if (scripMap[directKey]) return scripMap[directKey];
+
+    // Check holiday shifted expiries (e.g. requested 20OCT2026, but NSE contract is 19OCT2026)
+    const reqDay = parseInt(scripExpiry.substring(0, 2), 10);
+    const reqMonthYear = scripExpiry.substring(2);
+
+    for (const offset of [-1, 1, -2, 2, -3, 3]) {
+        const altDayNum = reqDay + offset;
+        if (altDayNum > 0 && altDayNum <= 31) {
+            const altDay = String(altDayNum).padStart(2, '0');
+            const altKey = `${scripName}_${altDay}${reqMonthYear}_${strike}_${type}`;
+            if (scripMap[altKey]) return scripMap[altKey];
+        }
+    }
+    return null;
+}
+
 // Start download and indexing on startup
 loadAndIndexScripMaster();
 
@@ -2156,11 +2177,8 @@ app.post('/api/options-chain/quotes', async (req, res) => {
         strikes.forEach(strike => {
             quotes[strike] = { CE: null, PE: null };
 
-            const keyCE = `${scripName}_${scripExpiry}_${strike}_CE`;
-            const keyPE = `${scripName}_${scripExpiry}_${strike}_PE`;
-
-            const itemCE = scripMap[keyCE];
-            const itemPE = scripMap[keyPE];
+            const itemCE = findScripItem(scripName, scripExpiry, strike, 'CE');
+            const itemPE = findScripItem(scripName, scripExpiry, strike, 'PE');
 
             if (itemCE) {
                 const cached = optionQuotesCache[itemCE.token];
@@ -2308,8 +2326,7 @@ app.post('/api/option-ltp', async (req, res) => {
         const parsed = parseOptionSymbol(symbol);
         if (!parsed) return res.status(400).json({ error: "Invalid option symbol", ltp: null });
 
-        const key = `${parsed.scripName}_${parsed.scripExpiry}_${parsed.strike}_${parsed.type}`;
-        const item = scripMap[key];
+        const item = findScripItem(parsed.scripName, parsed.scripExpiry, parsed.strike, parsed.type);
         if (!item) return res.status(404).json({ error: "Symbol not found in scripMap", ltp: null });
 
         // Check cache first
@@ -2959,10 +2976,9 @@ async function getLivePriceForSymbol(symbol, forceFresh = false) {
         throw new Error(`Symbol format is not recognized: ${symbol}`);
     }
 
-    const key = `${parsed.scripName}_${parsed.scripExpiry}_${parsed.strike}_${parsed.type}`;
-    const item = scripMap[key];
+    const item = findScripItem(parsed.scripName, parsed.scripExpiry, parsed.strike, parsed.type);
     if (!item) {
-        throw new Error(`Option contract not found in Master Scrip: ${key}`);
+        throw new Error(`Option contract not found in Master Scrip: ${parsed.scripName}_${parsed.scripExpiry}_${parsed.strike}_${parsed.type}`);
     }
 
     // 3. Check Cache
