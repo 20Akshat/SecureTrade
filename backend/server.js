@@ -2729,7 +2729,7 @@ app.get('/api/historical-candles', async (req, res) => {
 
         const cacheKey = `${underlying}_${tf}_${rng}`;
         const cached = historicalCache[cacheKey];
-        const cacheLimit = checkIsMarketOpen() ? 60000 : (30 * 60 * 1000); // 1 min when open, 30 min when closed
+        const cacheLimit = checkIsMarketOpen() ? (3 * 60 * 1000) : (30 * 60 * 1000); // 3 mins when open, 30 min when closed
         if (cached && (Date.now() - cached.timestamp < cacheLimit)) {
             const formatted = await formatOptionCandlesIfNeeded(cached.data, symbol);
             return res.json(formatted);
@@ -2810,6 +2810,13 @@ app.get('/api/historical-candles', async (req, res) => {
     } catch (err) {
         checkIfTokenInvalid(err);
         console.error(`❌ Historical candles fetch error:`, err.message);
+        const cacheKey = `${underlying}_${tf}_${rng}`;
+        const staleCached = historicalCache[cacheKey];
+        if (staleCached && staleCached.data && staleCached.data.length > 0) {
+            console.log(`♻️ Returning stale cached candles (${staleCached.data.length}) to prevent chart glitch.`);
+            const formatted = await formatOptionCandlesIfNeeded(staleCached.data, symbol);
+            return res.json(formatted);
+        }
         return res.json([]);
     }
 });

@@ -347,7 +347,12 @@ export default function TradingChart({ customSymbol, onMarketUpdate }: TradingCh
           throw new Error("Empty historical data");
         }
       } catch (err) {
-        console.warn("⚠️ API historical candles fetch failed, falling back to mock generation:", err);
+        console.warn("⚠️ API historical candles fetch failed:", err);
+        // 🛡️ Do NOT overwrite already valid real chart data with mock random data!
+        if (chartData && !chartData.isMock && chartData.symbol === activeSymbol && chartData.timeframe === timeframe && chartData.range === range) {
+          console.log("🛡️ Keeping existing real chart candles instead of falling back to mock.");
+          return;
+        }
         const intervalSeconds = range === "1M" ? 86400 : timeframe * 60;
         const mock = generateHistoricalData(activeSymbol, currentPrice, intervalSeconds, range);
         if (active) {
